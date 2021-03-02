@@ -68,6 +68,121 @@ def compute_RH(ds):
     
     return RH(TBP,QBP,ds['P0'],ds['PS'][1:,:,:],ds['hyam'],ds['hybm'])
 
+# tgb - 2/25/2021 - Calculate saturation deficit
+def compute_QSATdeficit(ds):
+    
+    def esat(T):
+        T0 = 273.16
+        T00 = 253.16
+        omega = np.maximum(0,np.minimum(1,(T-T00)/(T0-T00)))
+
+        return (T>T0)*eliq(T)+(T<T00)*eice(T)+(T<=T0)*(T>=T00)*(omega*eliq(T)+(1-omega)*eice(T))
+    
+    def eliq(T):
+        a_liq = np.array([-0.976195544e-15,-0.952447341e-13,0.640689451e-10,0.206739458e-7,0.302950461e-5,0.264847430e-3,0.142986287e-1,0.443987641,6.11239921]);
+        c_liq = -80
+        T0 = 273.16
+        return 100*np.polyval(a_liq,np.maximum(c_liq,T-T0))
+    
+    def eice(T):
+        a_ice = np.array([0.252751365e-14,0.146898966e-11,0.385852041e-9,0.602588177e-7,0.615021634e-5,0.420895665e-3,0.188439774e-1,0.503160820,6.11147274]);
+        c_ice = np.array([273.15,185,-100,0.00763685,0.000151069,7.48215e-07])
+        T0 = 273.16
+        return (T>c_ice[0])*eliq(T)+\
+    (T<=c_ice[0])*(T>c_ice[1])*100*np.polyval(a_ice,T-T0)+\
+    (T<=c_ice[1])*100*(c_ice[3]+np.maximum(c_ice[2],T-T0)*(c_ice[4]+np.maximum(c_ice[2],T-T0)*c_ice[5]))
+    
+    def qv(T,RH,P0,PS,hyam,hybm):
+        R = 287
+        Rv = 461
+        p = (hyam*P0+hybm*PS).values # Total pressure (Pa)
+
+        return R*esat(T)*RH/(Rv*p)
+
+    def qsat(T,P0,PS,hyam,hybm):
+        return qv(T,1,P0,PS,hyam,hybm)
+    
+    TBP = compute_bp(ds,'TBP')
+    QBP = compute_bp(ds,'QBP')
+    
+    return qsat(TBP,ds['P0'],ds['PS'][1:,:,:],ds['hyam'],ds['hybm'])-QBP
+
+# tgb - 2/25/2021 - Calculate buoyancy assuming adiabatic ascent
+def compute_BCONS(ds):
+    def esat(T):
+        T0 = 273.16
+        T00 = 253.16
+        omega = np.maximum(0,np.minimum(1,(T-T00)/(T0-T00)))
+
+        return (T>T0)*eliq(T)+(T<T00)*eice(T)+(T<=T0)*(T>=T00)*(omega*eliq(T)+(1-omega)*eice(T))
+    def eliq(T):
+        a_liq = np.array([-0.976195544e-15,-0.952447341e-13,0.640689451e-10,0.206739458e-7,0.302950461e-5,0.264847430e-3,0.142986287e-1,0.443987641,6.11239921]);
+        c_liq = -80
+        T0 = 273.16
+        return 100*np.polyval(a_liq,np.maximum(c_liq,T-T0))
+    def eice(T):
+        a_ice = np.array([0.252751365e-14,0.146898966e-11,0.385852041e-9,0.602588177e-7,0.615021634e-5,0.420895665e-3,0.188439774e-1,0.503160820,6.11147274]);
+        c_ice = np.array([273.15,185,-100,0.00763685,0.000151069,7.48215e-07])
+        T0 = 273.16
+        return (T>c_ice[0])*eliq(T)+\
+    (T<=c_ice[0])*(T>c_ice[1])*100*np.polyval(a_ice,T-T0)+\
+    (T<=c_ice[1])*100*(c_ice[3]+np.maximum(c_ice[2],T-T0)*(c_ice[4]+np.maximum(c_ice[2],T-T0)*c_ice[5]))
+    
+    def theta_e_calc(press_hPa, temp, q):
+        pref = 100000.
+        tmelt  = 273.15
+        CPD = 1005.7
+        CPV=1870.0
+        CPVMCL=2320.0
+        RV=461.5
+        RD=287.04
+        EPS=RD/RV
+        ALV0=2.501E6
+        #press, tempc,theta_e
+        #cdef double r,ev_hPa, TL, chi_e
+        press = press_hPa * 100. # in Pa
+        tempc = temp - tmelt # in C
+        r = q / (1. - q)
+        # get ev in hPa 
+        ev_hPa = press_hPa * r / (EPS + r)
+        #get TL
+        TL = (2840. / ((3.5*np.log(temp)) - (np.log(ev_hPa)) - 4.805)) + 55.
+        #calc chi_e:
+        chi_e = 0.2854 * (1. - (0.28*r))
+        theta_e = temp * (pref / press)**chi_e * np.exp(((3.376/TL) - 0.00254) * r * 1000. * (1. + (0.81 * r)))
+        return theta_e
+
+    def theta_e_sat_calc(press_hPa, temp):
+        pref = 100000.
+        tmelt  = 273.15
+        CPD = 1005.7
+        CPV=1870.0
+        CPVMCL=2320.0
+        RV=461.5
+        RD=287.04
+        EPS=RD/RV
+        ALV0=2.501E6
+        #press, tempc,theta_e
+        #cdef double r,ev_hPa, TL, chi_e
+        press = press_hPa * 100. # in Pa
+        tempc = temp - tmelt # in C
+        e_sat = esat(temp)
+        q = 0.622*e_sat/(press-(1-0.622)*e_sat)
+        r = q / (1. - q)
+        # get ev in hPa 
+        ev_hPa = press_hPa * r / (EPS + r)
+        #get TL
+        TL = (2840. / ((3.5*np.log(temp)) - (np.log(ev_hPa)) - 4.805)) + 55.
+        #calc chi_e:
+        chi_e = 0.2854 * (1. - (0.28*r))
+        theta_e = temp * (pref / press)**chi_e * np.exp(((3.376/TL) - 0.00254) * r * 1000. * (1. + (0.81 * r)))
+        return theta_e
+    
+    TBP = compute_bp(ds,'TBP')
+    QBP = compute_bp(ds,'QBP')
+    p = (ds['hyam']*ds['P0']+ds['hybm']*ds['PS'][1:,:,:]).values # Total pressure (Pa)
+    return G*(theta_e_calc(p,TBP,QBP)[:,-1,:,:]-theta_e_sat_calc(p,TBP))/theta_e_sat_calc(p,TBP)   
+
 def compute_dRH_dt(ds):
 # tgb - 12/01/2019 - Calculates dRH/dt following 027 and compute_bp
 # tgb - 11/13/2019 - Calculates Relative humidity following notebook 027
@@ -304,6 +419,91 @@ def compute_eps(ds, var):
         
     return x_interp
 
+# tgb - 3/1/2021 - Normalize LHF by near-surface specific humidity
+def compute_LHF_nsQ(ds,eps):
+    
+    def esat(T):
+        T0 = 273.16
+        T00 = 253.16
+        omega = np.maximum(0,np.minimum(1,(T-T00)/(T0-T00)))
+
+        return (T>T0)*eliq(T)+(T<T00)*eice(T)+(T<=T0)*(T>=T00)*(omega*eliq(T)+(1-omega)*eice(T))
+    
+    def eliq(T):
+        a_liq = np.array([-0.976195544e-15,-0.952447341e-13,0.640689451e-10,0.206739458e-7,0.302950461e-5,0.264847430e-3,0.142986287e-1,0.443987641,6.11239921]);
+        c_liq = -80
+        T0 = 273.16
+        return 100*np.polyval(a_liq,np.maximum(c_liq,T-T0))
+    
+    def eice(T):
+        a_ice = np.array([0.252751365e-14,0.146898966e-11,0.385852041e-9,0.602588177e-7,0.615021634e-5,0.420895665e-3,0.188439774e-1,0.503160820,6.11147274]);
+        c_ice = np.array([273.15,185,-100,0.00763685,0.000151069,7.48215e-07])
+        T0 = 273.16
+        return (T>c_ice[0])*eliq(T)+\
+    (T<=c_ice[0])*(T>c_ice[1])*100*np.polyval(a_ice,T-T0)+\
+    (T<=c_ice[1])*100*(c_ice[3]+np.maximum(c_ice[2],T-T0)*(c_ice[4]+np.maximum(c_ice[2],T-T0)*c_ice[5]))
+    
+    def qv(T,RH,P0,PS,hyam,hybm):
+        R = 287
+        Rv = 461
+        p = (hyam*P0+hybm*PS).values # Total pressure (Pa)
+
+        return R*esat(T)*RH/(Rv*p)
+
+    def qsat(T,P0,PS,hyam,hybm):
+        return qv(T,1,P0,PS,hyam,hybm)
+    
+    print(ds['hyam'].shape)
+    Qden = qsat(ds['TS'][1:,:,:],ds['P0'],ds['PS'][1:,:,:],ds['hyam'][-1],ds['hybm'][-1])
+    return ds['LHFLX'][:-1]/(L_V*np.maximum(eps,Qden))
+    
+# tgb - 3/1/2021 - Normalize LHF by near-surface specific humidity contrast
+def compute_LHF_nsDELQ(ds,eps):
+    
+    def esat(T):
+        T0 = 273.16
+        T00 = 253.16
+        omega = np.maximum(0,np.minimum(1,(T-T00)/(T0-T00)))
+
+        return (T>T0)*eliq(T)+(T<T00)*eice(T)+(T<=T0)*(T>=T00)*(omega*eliq(T)+(1-omega)*eice(T))
+    
+    def eliq(T):
+        a_liq = np.array([-0.976195544e-15,-0.952447341e-13,0.640689451e-10,0.206739458e-7,0.302950461e-5,0.264847430e-3,0.142986287e-1,0.443987641,6.11239921]);
+        c_liq = -80
+        T0 = 273.16
+        return 100*np.polyval(a_liq,np.maximum(c_liq,T-T0))
+    
+    def eice(T):
+        a_ice = np.array([0.252751365e-14,0.146898966e-11,0.385852041e-9,0.602588177e-7,0.615021634e-5,0.420895665e-3,0.188439774e-1,0.503160820,6.11147274]);
+        c_ice = np.array([273.15,185,-100,0.00763685,0.000151069,7.48215e-07])
+        T0 = 273.16
+        return (T>c_ice[0])*eliq(T)+\
+    (T<=c_ice[0])*(T>c_ice[1])*100*np.polyval(a_ice,T-T0)+\
+    (T<=c_ice[1])*100*(c_ice[3]+np.maximum(c_ice[2],T-T0)*(c_ice[4]+np.maximum(c_ice[2],T-T0)*c_ice[5]))
+    
+    def qv(T,RH,P0,PS,hyam,hybm):
+        R = 287
+        Rv = 461
+        p = (hyam*P0+hybm*PS).values # Total pressure (Pa)
+
+        return R*esat(T)*RH/(Rv*p)
+
+    def qsat(T,P0,PS,hyam,hybm):
+        return qv(T,1,P0,PS,hyam,hybm)
+    
+    QBP = compute_bp(ds,'QBP')
+    Qden = qsat(ds['TS'][1:,:,:],ds['P0'],ds['PS'][1:,:,:],ds['hyam'][-1],ds['hybm'][-1])-QBP[:,-1,:,:]
+    return ds['LHFLX'][:-1]/(L_V*np.maximum(eps,Qden))
+    
+# tgb - 3/1/2021 - Normalize SHF by near-surface temperature contrast
+def compute_SHF_nsDELT(ds,eps):
+    print('Computing TBP')
+    TBP = compute_bp(ds,'TBP')
+    print('Computing Tden')
+    Tden = ds['TS'][1:,:,:]-TBP
+    print('Returning normalized SHF')
+    return ds['SHFLX'][:-1]/(C_P*np.maximum(eps,Tden))
+
 def compute_adiabatic(ds, base_var):
     """Compute adiabatic tendencies.
     Args:
@@ -314,6 +514,19 @@ def compute_adiabatic(ds, base_var):
     """
     return (compute_bp(ds, base_var) - compute_c(ds, base_var)) / DT
 
+def load_O3_AQUA(ds):
+    """Load O3 profile for aquaplanet simulation
+    """
+    dT = compute_bp(ds,'TBP') # Calculate TBP to get the right shape
+    
+    path_O3 = '/export/nfs0home/tbeucler/CBRAIN-CAM/notebooks/tbeucler_devlog/PKL_DATA/2021_01_24_O3.pkl' # Hardcode O3 path for now
+    dO3 = pickle.load(open(path_O3,'rb'))
+    O3 = dO3['O3_aqua']
+    O3_interpolated = O3.interp({"lev": dT.lev}) # Interpolate to the right vertical levels
+    # Reshape to TBP's shape
+    O3_reshaped = np.moveaxis(np.tile(O3_interpolated,(dT.shape[0],dT.shape[-1],1,1)),source=[1,2],destination=[3,2]) 
+    
+    return (O3_reshaped+0*dT**0) # Make sure it is in xarray Dataset format with right dimensions
 
 def create_stacked_da(ds, vars):
     """
@@ -345,6 +558,8 @@ def create_stacked_da(ds, vars):
             da = (ds['PRECC'] + ds['PRECL'])[1:]
         elif var == 'RH':
             da = compute_RH(ds)
+        elif var == 'QSATdeficit':
+            da = compute_QSATdeficit(ds)
         elif var == 'dRHdt':
             da = compute_dRH_dt(ds)
         elif var == 'TfromMA':
@@ -357,10 +572,21 @@ def create_stacked_da(ds, vars):
             da = compute_TfromTS(ds)
         elif var == 'TfromNS':
             da = compute_TfromNS(ds)
+        elif var == 'BCONS':
+            da = compute_BCONS(ds)
         elif var == 'LR':
             da = compute_LR(ds)
         elif var == 'EPTNS':
             da = compute_EPTNS(ds)
+        elif var == 'LHF_nsQ':
+            da = compute_LHF_nsQ(ds,1e-3) # For now, hardcode eps=1e-3
+        elif var == 'LHF_nsDELQ':
+            da = compute_LHF_nsDELQ(ds,1e-3) # For now, hardcode eps=1e-3
+        elif var == 'SHF_nsDELT':
+            da = compute_SHF_nsDELT(ds,1) # For now, hardcore eps=1K
+        elif var == 'O3_AQUA':
+            da = load_O3_AQUA(ds)
+        
         elif 'dt_adiabatic' in var:
             base_var = var[:-12] + 'AP'
             da = compute_adiabatic(ds, base_var)
@@ -467,4 +693,35 @@ def preprocess(in_dir, in_fns, out_dir, out_fn, vars, lev_range=(0, 30)):
 
 if __name__ == '__main__':
     fire.Fire(preprocess)
+    
+def preprocess_list(in_dir, out_dir, out_fn, vars, list_xr1, list_xr2, lev_range=(0, 30)):
+    """
+    This is the main script that preprocesses one file.
+
+    Returns
+    -------
+
+    """
+    
+    out_fn = path.join(out_dir, out_fn)
+    logging.debug(f'Start preprocessing file {out_fn}')
+
+    logging.info('Reading input files')
+    logging.debug(f'Reading input file {list_xr1}')
+    logging.debug(f'and {list_xr2}')
+    ds = xr.open_mfdataset([list_xr1,list_xr2], decode_times=False, decode_cf=False, concat_dim='time')
+
+    logging.info('Crop levels')
+    ds = ds.isel(lev=slice(*lev_range, 1))
+
+    logging.info('Create stacked dataarray')
+    da = create_stacked_da(ds, vars)
+
+    logging.info('Stack and reshape dataarray')
+    da = reshape_da(da).reset_index('sample')
+
+    logging.info(f'Save dataarray as {out_fn}')
+    da.to_netcdf(out_fn)
+
+    logging.info('Done!')
 
