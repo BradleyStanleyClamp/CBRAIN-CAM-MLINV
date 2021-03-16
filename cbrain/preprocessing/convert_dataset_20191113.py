@@ -453,8 +453,7 @@ def compute_LHF_nsQ(ds,eps):
     def qsat(T,P0,PS,hyam,hybm):
         return qv(T,1,P0,PS,hyam,hybm)
     
-    print(ds['hyam'].shape)
-    Qden = qsat(ds['TS'][1:,:,:],ds['P0'],ds['PS'][1:,:,:],ds['hyam'][-1],ds['hybm'][-1])
+    Qden = qsat(ds['TS'][1:,:,:],ds['P0'],ds['PS'][1:,:,:],ds['hyam'][:,-1],ds['hybm'][:,-1])
     return ds['LHFLX'][:-1]/(L_V*np.maximum(eps,Qden))
     
 # tgb - 3/1/2021 - Normalize LHF by near-surface specific humidity contrast
@@ -492,7 +491,7 @@ def compute_LHF_nsDELQ(ds,eps):
         return qv(T,1,P0,PS,hyam,hybm)
     
     QBP = compute_bp(ds,'QBP')
-    Qden = qsat(ds['TS'][1:,:,:],ds['P0'],ds['PS'][1:,:,:],ds['hyam'][-1],ds['hybm'][-1])-QBP[:,-1,:,:]
+    Qden = qsat(ds['TS'][1:,:,:],ds['P0'],ds['PS'][1:,:,:],ds['hyam'][:,-1],ds['hybm'][:,-1])-QBP[:,-1,:,:]
     return ds['LHFLX'][:-1]/(L_V*np.maximum(eps,Qden))
     
 # tgb - 3/1/2021 - Normalize SHF by near-surface temperature contrast
