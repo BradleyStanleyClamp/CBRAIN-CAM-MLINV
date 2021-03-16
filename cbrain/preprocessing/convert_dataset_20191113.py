@@ -491,7 +491,7 @@ def compute_LHF_nsDELQ(ds,eps):
         return qv(T,1,P0,PS,hyam,hybm)
     
     QBP = compute_bp(ds,'QBP')
-    Qden = qsat(ds['TS'][1:,:,:],ds['P0'],ds['PS'][1:,:,:],ds['hyam'][:,-1],ds['hybm'][:,-1])-QBP[:,-1,:,:]
+    Qden = qsat(ds['TS'][1:,:,:],ds['P0'],ds['PS'][1:,:,:],ds['hyam'][:,-1],ds['hybm'][:,-1])-QBP[:,-1,:,:].values
     return ds['LHFLX'][:-1]/(L_V*np.maximum(eps,Qden))
     
 # tgb - 3/1/2021 - Normalize SHF by near-surface temperature contrast
