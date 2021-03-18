@@ -626,7 +626,7 @@ class T2BCONSNumpy:
         X_result = post
         return X_result
     
-class SHF2SHF_nsDELTNumpy
+class SHF2SHF_nsDELTNumpy:
     def __init__(self, inp_sub, inp_div, inp_subSHF, inp_divSHF, hyam, hybm, epsilon):
         self.inp_sub, self.inp_div, inp_subSHF, inp_divSHF, self.hyam, self.hybm, self.epsilon = \
         np.array(inp_sub), np.array(inp_div),
@@ -1111,7 +1111,7 @@ class DataGeneratorCI(DataGenerator):
              lower_lim=6,
              is_continous=True,Tnot=5,epsQ=1e-3,epsT=1,
                  mode='train'):
-        self.scaling = scaling
+        self.output_scaling = output_scaling
         self.interpolate = interpolate
         self.Qscaling = Qscaling
         self.Tscaling = Tscaling
@@ -1136,7 +1136,7 @@ class DataGeneratorCI(DataGenerator):
         
         if LHFscaling=='LHF_nsDELQ':
             self.LHFLayer = LHF2LHF_nsDELQNumpy(self.inp_sub,self.inp_div,inp_sub_LHFscaling,inp_div_LHFscaling,hyam,hybm,epsQ)
-        elif LHFscaling='LHF_nsQ':
+        elif LHFscaling=='LHF_nsQ':
             self.LHFLayer = LHF2LHF_nsQNumpy(self.inp_sub,self.inp_div,inp_sub_LHFscaling,inp_div_LHFscaling,hyam,hybm,epsQ)
             
         if SHFscaling=='SHF_nsDELT':
