@@ -128,60 +128,50 @@ def compute_BCONS(ds):
     (T<=c_ice[0])*(T>c_ice[1])*100*np.polyval(a_ice,T-T0)+\
     (T<=c_ice[1])*100*(c_ice[3]+np.maximum(c_ice[2],T-T0)*(c_ice[4]+np.maximum(c_ice[2],T-T0)*c_ice[5]))
     
-    def theta_e_calc(press_hPa, temp, q):
-        pref = 100000.
+    def qv(T,RH,P0,PS,hyam,hybm):
+        R = 287
+        Rv = 461
+        p = (hyam*P0+hybm*PS).values # Total pressure (Pa)
+
+        return R*esat(T)*RH/(Rv*p)
+
+    def qsat(T,P0,PS,hyam,hybm):
+        return qv(T,1,P0,PS,hyam,hybm)
+    
+    def theta_e_calc(T,qv,P0,PS,hyam,hybm):
+        p = (hyam*P0+hybm*PS).values # Total pressure (Pa)
+        
         tmelt  = 273.15
         CPD = 1005.7
-        CPV=1870.0
-        CPVMCL=2320.0
-        RV=461.5
-        RD=287.04
-        EPS=RD/RV
-        ALV0=2.501E6
-        #press, tempc,theta_e
-        #cdef double r,ev_hPa, TL, chi_e
-        press = press_hPa * 100. # in Pa
-        tempc = temp - tmelt # in C
-        r = q / (1. - q)
+        CPV = 1870.0
+        CPVMCL = 2320.0
+        RV = 461.5
+        RD = 287.04
+        EPS = RD/RV
+        ALV0 = 2.501E6
+        
+        r = qv / (1. - qv)
         # get ev in hPa 
-        ev_hPa = press_hPa * r / (EPS + r)
+        ev_hPa = 100*p*r/(EPS+r)
         #get TL
-        TL = (2840. / ((3.5*np.log(temp)) - (np.log(ev_hPa)) - 4.805)) + 55.
+        TL = (2840. / ((3.5*np.log(T)) - (np.log(ev_hPa)) - 4.805)) + 55.
         #calc chi_e:
         chi_e = 0.2854 * (1. - (0.28*r))
-        theta_e = temp * (pref / press)**chi_e * np.exp(((3.376/TL) - 0.00254) * r * 1000. * (1. + (0.81 * r)))
+        P0_norm = (P0/(hyam*P0+hybm*PS)).values
+
+        theta_e = T * P0_norm**chi_e * np.exp(((3.376/TL) - 0.00254) * r * 1000. * (1. + (0.81 * r)))
+        
         return theta_e
 
-    def theta_e_sat_calc(press_hPa, temp):
-        pref = 100000.
-        tmelt  = 273.15
-        CPD = 1005.7
-        CPV=1870.0
-        CPVMCL=2320.0
-        RV=461.5
-        RD=287.04
-        EPS=RD/RV
-        ALV0=2.501E6
-        #press, tempc,theta_e
-        #cdef double r,ev_hPa, TL, chi_e
-        press = press_hPa * 100. # in Pa
-        tempc = temp - tmelt # in C
-        e_sat = esat(temp)
-        q = 0.622*e_sat/(press-(1-0.622)*e_sat)
-        r = q / (1. - q)
-        # get ev in hPa 
-        ev_hPa = press_hPa * r / (EPS + r)
-        #get TL
-        TL = (2840. / ((3.5*np.log(temp)) - (np.log(ev_hPa)) - 4.805)) + 55.
-        #calc chi_e:
-        chi_e = 0.2854 * (1. - (0.28*r))
-        theta_e = temp * (pref / press)**chi_e * np.exp(((3.376/TL) - 0.00254) * r * 1000. * (1. + (0.81 * r)))
-        return theta_e
+    def theta_e_sat_calc(T,qv,P0,PS,hyam,hybm):
+        return theta_e_calc(T,qsat(T,P0,PS,hyam,hybm),P0,PS,hyam,hybm)
     
     TBP = compute_bp(ds,'TBP')
     QBP = compute_bp(ds,'QBP')
-    p = (ds['hyam']*ds['P0']+ds['hybm']*ds['PS'][1:,:,:]).values # Total pressure (Pa)
-    return G*(theta_e_calc(p,TBP,QBP)[:,-1,:,:]-theta_e_sat_calc(p,TBP))/theta_e_sat_calc(p,TBP)   
+    
+    return G*(theta_e_calc(TBP,QBP,ds['P0'],ds['PS'][1:,:,:],ds['hyam'],ds['hybm'])[:,-1,:,:]-\
+              theta_e_sat_calc(TBP,QBP,ds['P0'],ds['PS'][1:,:,:],ds['hyam'],ds['hybm']))/\
+theta_e_sat_calc(TBP,QBP,ds['P0'],ds['PS'][1:,:,:],ds['hyam'],ds['hybm'])   
 
 def compute_dRH_dt(ds):
 # tgb - 12/01/2019 - Calculates dRH/dt following 027 and compute_bp
@@ -422,38 +412,8 @@ def compute_eps(ds, var):
 # tgb - 3/1/2021 - Normalize LHF by near-surface specific humidity
 def compute_LHF_nsQ(ds,eps):
     
-    def esat(T):
-        T0 = 273.16
-        T00 = 253.16
-        omega = np.maximum(0,np.minimum(1,(T-T00)/(T0-T00)))
-
-        return (T>T0)*eliq(T)+(T<T00)*eice(T)+(T<=T0)*(T>=T00)*(omega*eliq(T)+(1-omega)*eice(T))
-    
-    def eliq(T):
-        a_liq = np.array([-0.976195544e-15,-0.952447341e-13,0.640689451e-10,0.206739458e-7,0.302950461e-5,0.264847430e-3,0.142986287e-1,0.443987641,6.11239921]);
-        c_liq = -80
-        T0 = 273.16
-        return 100*np.polyval(a_liq,np.maximum(c_liq,T-T0))
-    
-    def eice(T):
-        a_ice = np.array([0.252751365e-14,0.146898966e-11,0.385852041e-9,0.602588177e-7,0.615021634e-5,0.420895665e-3,0.188439774e-1,0.503160820,6.11147274]);
-        c_ice = np.array([273.15,185,-100,0.00763685,0.000151069,7.48215e-07])
-        T0 = 273.16
-        return (T>c_ice[0])*eliq(T)+\
-    (T<=c_ice[0])*(T>c_ice[1])*100*np.polyval(a_ice,T-T0)+\
-    (T<=c_ice[1])*100*(c_ice[3]+np.maximum(c_ice[2],T-T0)*(c_ice[4]+np.maximum(c_ice[2],T-T0)*c_ice[5]))
-    
-    def qv(T,RH,P0,PS,hyam,hybm):
-        R = 287
-        Rv = 461
-        p = (hyam*P0+hybm*PS).values # Total pressure (Pa)
-
-        return R*esat(T)*RH/(Rv*p)
-
-    def qsat(T,P0,PS,hyam,hybm):
-        return qv(T,1,P0,PS,hyam,hybm)
-    
-    Qden = qsat(ds['TS'][1:,:,:],ds['P0'],ds['PS'][1:,:,:],ds['hyam'][:,-1],ds['hybm'][:,-1])
+    QBP = compute_bp(ds,'QBP')
+    Qden = QBP[:,-1:,:,:]
     return ds['LHFLX'][:-1]/(L_V*np.maximum(eps,Qden))
     
 # tgb - 3/1/2021 - Normalize LHF by near-surface specific humidity contrast
