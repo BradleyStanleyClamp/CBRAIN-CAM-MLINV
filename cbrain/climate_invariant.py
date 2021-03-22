@@ -479,7 +479,8 @@ class ThermLibNumpy:
     
     @staticmethod
     def theta_e_calc(T,qv,P0,PS,hyam,hybm):
-        p = (hyam*P0+hybm*PS).values # Total pressure (Pa)
+        S = PS.shape
+        p = P0 * np.tile(hyam,(S[0],1))+np.transpose(np.tile(PS,(30,1)))*np.tile(hybm,(S[0],1))
         
         tmelt  = 273.15
         CPD = 1005.7
@@ -497,13 +498,20 @@ class ThermLibNumpy:
         TL = (2840. / ((3.5*np.log(T)) - (np.log(ev_hPa)) - 4.805)) + 55.
         #calc chi_e:
         chi_e = 0.2854 * (1. - (0.28*r))
-        P0_norm = (P0/(hyam*P0+hybm*PS)).values
+        P0_norm = (P0/(P0 * np.tile(hyam,(S[0],1))+np.transpose(np.tile(PS,(30,1)))*np.tile(hybm,(S[0],1))))
 
+#         tf.print('T.shape',T.shape)
+#         tf.print('P0_norm.shape',P0_norm.shape)
+#         tf.print('chi_e.shape',chi_e.shape)
+#         tf.print('TL.shape',TL.shape)
+#         tf.print('r.shape',r.shape)
         theta_e = T * P0_norm**chi_e * np.exp(((3.376/TL) - 0.00254) * r * 1000. * (1. + (0.81 * r)))
+#        tf.print('theta_e.shape',theta_e.shape)
+        return theta_e
 
     @staticmethod
-    def theta_e_sat_calc(T,qv,P0,PS,hyam,hybm):
-        return theta_e(T,qsatNumpy(T,P0,PS,hyam,hybm),P0,PS,hyam,hybm) 
+    def theta_e_sat_calc(T,P0,PS,hyam,hybm):
+        return ThermLibNumpy.theta_e_calc(T,ThermLibNumpy.qsatNumpy(T,P0,PS,hyam,hybm),P0,PS,hyam,hybm) 
 
 class QV2RHNumpy:
     def __init__(self, inp_sub, inp_div, inp_subRH, inp_divRH, hyam, hybm):
@@ -545,7 +553,7 @@ class QV2QSATdeficitNumpy:
         Tprior = X[:,self.TBP_idx]*self.inp_div[self.TBP_idx]+self.inp_sub[self.TBP_idx]
         qvprior = X[:,self.QBP_idx]*self.inp_div[self.QBP_idx]+self.inp_sub[self.QBP_idx]
         PSprior = X[:,self.PS_idx]*self.inp_div[self.PS_idx]+self.inp_sub[self.PS_idx]
-        QSATdeficitprior = (ThermLibNumpy.qsatNumpy(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)-\
+        QSATdeficitprior = (ThermLibNumpy.qsatNumpy(Tprior,P0,PSprior,self.hyam,self.hybm)-\
                             qvprior-self.inp_subQ[self.QBP_idx])/self.inp_divQ[self.QBP_idx]
 
         X_result = np.concatenate([QSATdeficitprior.astype(np.float32),X[:,30:]], axis=1)
@@ -616,12 +624,25 @@ class T2BCONSNumpy:
         qvprior = X[:,self.QBP_idx]*self.inp_div[self.QBP_idx]+self.inp_sub[self.QBP_idx]
         PSprior = X[:,self.PS_idx]*self.inp_div[self.PS_idx]+self.inp_sub[self.PS_idx]
 
-        Bcons = G*(ThermLibNumpy.theta_e_calc(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)[:,-1]-\
-                   ThermLibNumpy.theta_e_sat_calc(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm))/\
-        ThermLibNumpy.theta_e_sat_calc(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)
+#         tf.print('Tprior.shape',Tprior.shape)
+#         tf.print('qvprior.shape',qvprior.shape)
+#         tf.print('P0',P0)
+#         tf.print('PSprior.shape',PSprior.shape)
+#         tf.print('self.hyam.shape',self.hyam.shape)
+#         tf.print('self.hybm.shape',self.hybm.shape)
+        
+        theta = ThermLibNumpy.theta_e_calc(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)
+#         tf.print('theta.shape',theta.shape)
+#         tf.print((ThermLibNumpy.theta_e_calc(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)).shape)
+        Tile_dim = [1,30]
+        thetaS = ThermLibNumpy.theta_e_calc(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)[:,-1]
+        
+        Bcons = G*(np.tile(np.expand_dims(thetaS,axis=1),Tile_dim)-\
+                   ThermLibNumpy.theta_e_sat_calc(Tprior,P0,PSprior,self.hyam,self.hybm))/\
+        ThermLibNumpy.theta_e_sat_calc(Tprior,P0,PSprior,self.hyam,self.hybm)
         Bconsprior = (Bcons-self.inp_subT[self.TBP_idx])/self.inp_divT[self.TBP_idx]
 
-        post = np.concatenate([X[:,:30],BCONSprior.astype(np.float32),X[:,60:]], axis=1)
+        post = np.concatenate([X[:,:30],Bconsprior.astype(np.float32),X[:,60:]], axis=1)
 
         X_result = post
         return X_result
@@ -1165,12 +1186,22 @@ class DataGeneratorCI(DataGenerator):
         # Normalize
         X_norm = self.input_transform.transform(X)
         Y = self.output_transform.transform(Y)
-        X_result = X_norm
+        X_result = np.copy(X_norm)
 
         if self.Qscaling:
             X_result = self.QLayer.process(X_result)
 
         if self.Tscaling:
+            # tgb - 3/21/2021 - BCONS needs qv in kg/kg as an input
+            if self.Tscaling=='BCONS':
+                if self.Qscaling:
+                    X_resultT = self.TLayer.process(X_norm)
+                    X_result = np.concatenate([X_result[:,:30],X_resultT[:,30:60],X_result[:,60:]], axis=1)
+                else:
+                    X_result = self.TLayer.process(X_result)
+            else:
+                X_result = self.TLayer.process(X_result)
+        else:
             X_result = self.TLayer.process(X_result)
             
         if self.SHFscaling:
