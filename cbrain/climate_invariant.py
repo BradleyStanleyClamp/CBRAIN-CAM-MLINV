@@ -500,13 +500,8 @@ class ThermLibNumpy:
         chi_e = 0.2854 * (1. - (0.28*r))
         P0_norm = (P0/(P0 * np.tile(hyam,(S[0],1))+np.transpose(np.tile(PS,(30,1)))*np.tile(hybm,(S[0],1))))
 
-#         tf.print('T.shape',T.shape)
-#         tf.print('P0_norm.shape',P0_norm.shape)
-#         tf.print('chi_e.shape',chi_e.shape)
-#         tf.print('TL.shape',TL.shape)
-#         tf.print('r.shape',r.shape)
         theta_e = T * P0_norm**chi_e * np.exp(((3.376/TL) - 0.00254) * r * 1000. * (1. + (0.81 * r)))
-#        tf.print('theta_e.shape',theta_e.shape)
+
         return theta_e
 
     @staticmethod
@@ -571,19 +566,6 @@ class T2TmTNSNumpy:
         self.PS_idx = 60
         self.SHFLX_idx = 62
         self.LHFLX_idx = 63
-
-#     def process(self,X):
-#         Tprior = X[:,self.TBP_idx]*self.inp_div[self.TBP_idx]+self.inp_sub[self.TBP_idx]
-
-#         Tile_dim = [1,30]
-#         TNSprior = (((Tprior-220)/(np.tile(np.expand_dims(Tprior[:,-1],axis=1)-220,Tile_dim)))-\
-#                     self.inp_subTNS[self.TBP_idx])/\
-#         self.inp_divTNS[self.TBP_idx]
-
-#         post = np.concatenate([X[:,:30],TNSprior.astype(np.float32),X[:,60:]], axis=1)
-
-#         X_result = post
-#         return X_result
     
     def process(self,X):
         Tprior = X[:,self.TBP_idx]*self.inp_div[self.TBP_idx]+self.inp_sub[self.TBP_idx]
@@ -598,13 +580,6 @@ class T2TmTNSNumpy:
         X_result = post
         return X_result
     
-#     def qsat(T,P0,PS,hyam,hybm):
-#         return qv(T,1,P0,PS,hyam,hybm)
-    
-#     TBP = compute_bp(ds,'TBP')
-#     QBP = compute_bp(ds,'QBP')
-    
-#     return qsat(TBP,ds['P0'],ds['PS'][1:,:,:],ds['hyam'],ds['hybm'])-QBP
 
 class T2BCONSNumpy:
     def __init__(self, inp_sub, inp_div, inp_subT, inp_divT, hyam, hybm):
@@ -623,17 +598,8 @@ class T2BCONSNumpy:
         Tprior = X[:,self.TBP_idx]*self.inp_div[self.TBP_idx]+self.inp_sub[self.TBP_idx]
         qvprior = X[:,self.QBP_idx]*self.inp_div[self.QBP_idx]+self.inp_sub[self.QBP_idx]
         PSprior = X[:,self.PS_idx]*self.inp_div[self.PS_idx]+self.inp_sub[self.PS_idx]
-
-#         tf.print('Tprior.shape',Tprior.shape)
-#         tf.print('qvprior.shape',qvprior.shape)
-#         tf.print('P0',P0)
-#         tf.print('PSprior.shape',PSprior.shape)
-#         tf.print('self.hyam.shape',self.hyam.shape)
-#         tf.print('self.hybm.shape',self.hybm.shape)
         
         theta = ThermLibNumpy.theta_e_calc(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)
-#         tf.print('theta.shape',theta.shape)
-#         tf.print((ThermLibNumpy.theta_e_calc(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)).shape)
         Tile_dim = [1,30]
         thetaS = ThermLibNumpy.theta_e_calc(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)[:,-1]
         
@@ -650,8 +616,8 @@ class T2BCONSNumpy:
 class SHF2SHF_nsDELTNumpy:
     def __init__(self, inp_sub, inp_div, inp_subSHF, inp_divSHF, hyam, hybm, epsilon):
         self.inp_sub, self.inp_div, inp_subSHF, inp_divSHF, self.hyam, self.hybm, self.epsilon = \
-        np.array(inp_sub), np.array(inp_div),
-        np.array(self.inp_subSHF), np.array(self.inp_divSHF),
+        np.array(inp_sub), np.array(inp_div), \
+        np.array(inp_subSHF), np.array(inp_divSHF), \
         np.array(hyam), np.array(hybm),np.array(epsilon)
         
         # Define variable indices here
@@ -666,23 +632,27 @@ class SHF2SHF_nsDELTNumpy:
         Tprior = X[:,self.TBP_idx]*self.inp_div[self.TBP_idx]+self.inp_sub[self.TBP_idx]
         SHFprior = X[:,self.SHFLX_idx]*self.inp_div[self.SHFLX_idx]+self.inp_sub[self.SHFLX_idx]
         
-        Tile_dim = [1,30]
-        TSprior = np.tile(np.expand_dims(Tprior[:,-1],axis=1),Tile_dim)
-        Tdenprior = np.maximum(epsilon,TSprior-Tprior)
+        #Tile_dim = [1,30]
+        #TSprior = np.tile(np.expand_dims(Tprior[:,-1],axis=1),Tile_dim)
+        Tdenprior = np.maximum(self.epsilon,TSprior-Tprior[:,-1])
         
+        #SHFtile = np.tile(np.expand_dims(SHFprior,axis=1),Tile_dim)
         SHFscaled = (SHFprior/(C_P*Tdenprior)-\
                      self.inp_subT[self.TBP_idx])/self.inp_divT[self.TBP_idx]
+        Tile_dim = [1,1]
+        SHFtile = np.tile(np.expand_dims(SHFscaled.astype(np.float32),axis=1),Tile_dim)
         
-        post = np.concatenate([X[:,:self.SHFLX_idx],SHFscaled.astype(np.float32),X[:,self.LHFLX_idx:]], axis=1)
+        
+        post = np.concatenate([X[:,:self.SHFLX_idx],SHFtile,X[:,self.LHFLX_idx:]], axis=1)
         
         X_result = post
         return post 
 
 class LHF2LHF_nsDELQNumpy:
     def __init__(self, inp_sub, inp_div, inp_subLHF, inp_divLHF, hyam, hybm, epsilon):
-        self.inp_sub, self.inp_div, inp_subLHF, inp_divLHF, self.hyam, self.hybm, self.epsilon = \
-        np.array(inp_sub), np.array(inp_div),
-        np.array(self.inp_subLHF), np.array(self.inp_divLHF),
+        self.inp_sub, self.inp_div, self.inp_subLHF, self.inp_divLHF, self.hyam, self.hybm, self.epsilon = \
+        np.array(inp_sub), np.array(inp_div), \
+        np.array(inp_subLHF), np.array(inp_divLHF), \
         np.array(hyam), np.array(hybm),np.array(epsilon)
         
         # Define variable indices here
@@ -697,14 +667,18 @@ class LHF2LHF_nsDELQNumpy:
         qvprior = X[:,self.QBP_idx]*self.inp_div[self.QBP_idx]+self.inp_sub[self.QBP_idx]
         Tprior = X[:,self.TBP_idx]*self.inp_div[self.TBP_idx]+self.inp_sub[self.TBP_idx]
         PSprior = X[:,self.PS_idx]*self.inp_div[self.PS_idx]+self.inp_sub[self.PS_idx]
-        LHFprior = X[:,self.LHF_idx]*self.inp_div[self.LHF_idx]+self.inp_sub[self.LHF_idx]
+        LHFprior = X[:,self.LHFLX_idx]*self.inp_div[self.LHFLX_idx]+self.inp_sub[self.LHFLX_idx]
         
-        Qdenprior = ThermLibNumpy.qsatNumpy(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)-qvprior
-        Qdenprior = np.maximum(epsilon,Qdenprior)
+        Qdenprior = (ThermLibNumpy.qsatNumpy(Tprior,P0,PSprior,self.hyam,self.hybm))[:,-1]-qvprior[:,-1]
+        Qdenprior = np.maximum(self.epsilon,Qdenprior)
+        
+        Tile_dim = [1,1]
+        #LHFtile = np.tile(np.expand_dims(LHFprior,axis=1),Tile_dim)
         LHFscaled = (LHFprior/(L_V*Qdenprior)-\
-                     self.inp_subLHF[self.LHF_idx])/self.inp_divLHF[self.LHF_idx]
+                     self.inp_subLHF[self.LHFLX_idx])/self.inp_divLHF[self.LHFLX_idx]
+        LHFtile = np.tile(np.expand_dims(LHFscaled.astype(np.float32),axis=1),Tile_dim)
         
-        post = np.concatenate([X[:,:self.LHFLX_idx],LHFscaled.astype(np.float32),\
+        post = np.concatenate([X[:,:self.LHFLX_idx],LHFtile,\
                                X[:,(self.LHFLX_idx+1):]],axis=1)
         
         X_result = post
@@ -712,9 +686,9 @@ class LHF2LHF_nsDELQNumpy:
     
 class LHF2LHF_nsQNumpy:
     def __init__(self, inp_sub, inp_div, inp_subLHF, inp_divLHF, hyam, hybm, epsilon):
-        self.inp_sub, self.inp_div, inp_subLHF, inp_divLHF, self.hyam, self.hybm, self.epsilon = \
-        np.array(inp_sub), np.array(inp_div),
-        np.array(self.inp_subLHF), np.array(self.inp_divLHF),
+        self.inp_sub, self.inp_div, self.inp_subLHF, self.inp_divLHF, self.hyam, self.hybm, self.epsilon = \
+        np.array(inp_sub), np.array(inp_div), \
+        np.array(inp_subLHF), np.array(inp_divLHF), \
         np.array(hyam), np.array(hybm),np.array(epsilon)
         
         # Define variable indices here
@@ -727,13 +701,18 @@ class LHF2LHF_nsQNumpy:
         
     def process(self,X):
         qvprior = X[:,self.QBP_idx]*self.inp_div[self.QBP_idx]+self.inp_sub[self.QBP_idx]
-        LHFprior = X[:,self.LHF_idx]*self.inp_div[self.LHF_idx]+self.inp_sub[self.LHF_idx]
+        LHFprior = X[:,self.LHFLX_idx]*self.inp_div[self.LHFLX_idx]+self.inp_sub[self.LHFLX_idx]
         
-        Qdenprior = np.maximum(epsilon,qvprior)
+        Qdenprior = np.maximum(self.epsilon,qvprior[:,-1])
+        
+        #Tile_dim = [1,30]
+        #LHFtile = np.tile(np.expand_dims(LHFprior,axis=1),Tile_dim)
         LHFscaled = (LHFprior/(L_V*Qdenprior)-\
-                     self.inp_subLHF[self.LHF_idx])/self.inp_divLHF[self.LHF_idx]
+                     self.inp_subLHF[self.LHFLX_idx])/self.inp_divLHF[self.LHFLX_idx]
         
-        post = np.concatenate([X[:,:self.LHFLX_idx],LHFscaled.astype(np.float32),\
+        Tile_dim = [1,1]
+        LHFtile = np.tile(np.expand_dims(LHFscaled.astype(np.float32),axis=1),Tile_dim)
+        post = np.concatenate([X[:,:self.LHFLX_idx],LHFtile,\
                                X[:,(self.LHFLX_idx+1):]],axis=1)
         
         X_result = post
@@ -1201,14 +1180,17 @@ class DataGeneratorCI(DataGenerator):
                     X_result = self.TLayer.process(X_result)
             else:
                 X_result = self.TLayer.process(X_result)
-        else:
-            X_result = self.TLayer.process(X_result)
             
         if self.SHFscaling:
             X_result = self.SHFLayer.process(X_result)
 
         if self.LHFscaling:
-            X_result = self.LHFLayer.process(X_result)
+            # tgb - 3/22/2021 - LHF_ns(DEL)Q needs qv in kg/kg and T in K
+            if self.Qscaling or self.Tscaling:
+                X_resultLHF = self.LHFLayer.process(X_norm)
+                X_result = np.concatenate([X_result[:,:60],X_resultLHF[:,60:]],axis=1)
+            else:
+                X_result = self.LHFLayer.process(X_result)
 
         if self.output_scaling:
             scalings = self.scalingLayer.process(X)
