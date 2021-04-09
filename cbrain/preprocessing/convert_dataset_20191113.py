@@ -8,6 +8,7 @@ tgb - 11/13/2019 - Adding RH and deviation from moist adiabat
 
 from ..imports import *
 from ..cam_constants import *
+import pickle
 
 # Set up logging, mainly to get timings easily.
 logging.basicConfig(
@@ -36,6 +37,29 @@ def compute_bp(ds, var):
     """
     base_var = var[:-2] + 'AP'
     return (ds[base_var] - ds[phy_dict[base_var]] * DT)[1:]  # Not the first time step
+
+def compute_perc(ds, var, PERC_array, quantile_array):
+    
+    from scipy.interpolate import interp1d
+    
+    # Load variable from dataset
+    var0 = ds[var[:-4]][1:]
+    # Manually entering ranges for each variable: 
+    # This should change and PERC_array should be a dictionary with variable names
+    i0 = {}
+    i0['PHQ'] = 94
+    i0['TPHYSTND'] = 124
+    i0['QRL'] = 154
+    i0['QRS'] = 184
+    
+    # Project onto 1D percentile space to form the output
+    output_percentile = np.zeros(var0.shape) # Initialization
+    for ilev in range(var0.shape[1]):
+        print('Interpolating level ',ilev,'out of ',var0.shape[1])
+        interp_fx = interp1d(x=PERC_array[:,i0[var[:-4]]+ilev],y=quantile_array,bounds_error=False)
+        output_percentile[:,ilev,:,:] = interp_fx(var0[:,ilev,:,:])
+        
+    return (output_percentile+0*var0**0) # Convert from numpy back to xarray
 
 def compute_RH(ds):
     # tgb - 11/13/2019 - Calculates Relative humidity following notebook 027
@@ -278,6 +302,12 @@ def compute_CarnotS(ds):
     TBP = compute_bp(ds,'TBP')
     return -(TBP-ds['TS'][1:,:,:])/(ds['TS'][1:,:,:]-TBP.min(axis=1))
 
+# tgb - 3/31/2020 - Adding (TNS-T)/(TNS-220K)
+def compute_NSto220(ds):
+    TBP = compute_bp(ds,'TBP')
+    T_tropopause= 220 # Hardcode the tropopause temperature for now
+    return (TBP[:,-1,:,:]-TBP)/(TBP[:,-1,:,:]-T_tropopause)
+
 def compute_c(ds, base_var):
     """CRM state at beginning of time step before physics.
     ?_C = ?AP[t-1] - diffusion[t-1] * dt
@@ -487,7 +517,7 @@ def load_O3_AQUA(ds):
     
     return (O3_reshaped+0*dT**0) # Make sure it is in xarray Dataset format with right dimensions
 
-def create_stacked_da(ds, vars):
+def create_stacked_da(ds, vars, PERC_array = None, quantile_array = None):
     """
     In this function the derived variables are computed and the right time steps are selected.
 
@@ -509,6 +539,8 @@ def create_stacked_da(ds, vars):
             da = compute_flux(ds,var)
         elif 'BP' in var:
             da = compute_bp(ds, var)
+        elif 'PERC' in var:
+            da = compute_perc(ds, var, PERC_array, quantile_array)
         elif var in ['LHFLX', 'SHFLX']:
             da = ds[var][:-1]
         elif var == 'PRECST':
@@ -531,6 +563,8 @@ def create_stacked_da(ds, vars):
             da = compute_TfromTS(ds)
         elif var == 'TfromNS':
             da = compute_TfromNS(ds)
+        elif var == 'T_NSto220':
+            da = compute_NSto220(ds)
         elif var == 'BCONS':
             da = compute_BCONS(ds)
         elif var == 'LR':
@@ -617,7 +651,7 @@ def reshape_da(da):
     return da.transpose('sample', 'var_names')
 
 
-def preprocess(in_dir, in_fns, out_dir, out_fn, vars, lev_range=(0, 30)):
+def preprocess(in_dir, in_fns, out_dir, out_fn, vars, lev_range=(0, 30), path_PERC = None):
     """
     This is the main script that preprocesses one file.
 
@@ -634,12 +668,21 @@ def preprocess(in_dir, in_fns, out_dir, out_fn, vars, lev_range=(0, 30)):
     logging.info('Reading input files')
     logging.debug(f'Reading input file {in_fns}')
     ds = xr.open_mfdataset(in_fns, decode_times=False, decode_cf=False, concat_dim='time')
-
+    
+    # tgb - 3/28/2021 - Added this line to read percentiles from PKL file
+    if path_PERC:
+        logging.info('Reading PKL file containing univariate distribution of output variables')
+        logging.info(f'Reading {path_PERC}')
+        hf = open(path_PERC,'rb')
+        tmp = pickle.load(hf)
+        PERC_array = tmp['PERC_array']
+        quantile_array = tmp['quantile_array']                   
+    
     logging.info('Crop levels')
     ds = ds.isel(lev=slice(*lev_range, 1))
 
     logging.info('Create stacked dataarray')
-    da = create_stacked_da(ds, vars)
+    da = create_stacked_da(ds, vars, PERC_array = PERC_array, quantile_array = quantile_array)
 
     logging.info('Stack and reshape dataarray')
     da = reshape_da(da).reset_index('sample')
