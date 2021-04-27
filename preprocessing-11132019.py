@@ -25,14 +25,18 @@ def main(args):
     -------
 
     """
+    
     # Create training dataset
     if args.in_fns is not None:
         if args.path_PERC is not None:
             logging.info('Preprocess training dataset including output quantiles')
-            preprocess(args.in_dir, args.in_fns, args.out_dir, args.out_fn, args.vars, path_PERC = args.path_PERC)
+            logging.info(f'with real_geography flag set to {args.real_geography}')
+            preprocess(args.in_dir, args.in_fns, args.out_dir, args.out_fn, args.vars, 
+                       path_PERC = args.path_PERC, real_geography = args.real_geography)
         else:
-            logging.info('Preprocess training dataset')
-            preprocess(args.in_dir, args.in_fns, args.out_dir, args.out_fn, args.vars)
+            logging.info(f'Preprocess training dataset with real_geography flag set to {args.real_geography}')
+            preprocess(args.in_dir, args.in_fns, args.out_dir, args.out_fn, args.vars,
+                       real_geography = args.real_geography)
     else:
         if args.list==True:
             preprocess_list(args.in_dir, args.out_dir, args.out_fn, args.vars, 
@@ -48,8 +52,15 @@ def main(args):
 
     # Potentially
     if args.val_in_fns is not None:
-        logging.info('Preprocess validation dataset')
-        preprocess(args.in_dir, args.val_in_fns, args.out_dir, args.val_out_fn, args.vars)
+        if args.path_PERC_val is not None:
+            logging.info('Preprocess validation dataset including output quantiles')
+            preprocess(args.in_dir, args.val_in_fns, args.out_dir, args.val_out_fn, 
+                       args.vars, path_PERC = args.path_PERC_val, real_geography = args.real_geography)
+        else:
+            logging.info('Preprocess validation dataset')
+            preprocess(args.in_dir, args.val_in_fns, args.out_dir, args.val_out_fn, args.vars,
+                       real_geography = args.real_geography)
+        
 
     if args.norm_fn is not None:
         logging.info(f'Compute normalization file from {args.norm_train_or_valid}')
@@ -89,7 +100,11 @@ if __name__ == '__main__':
     p.add('--norm_train_or_valid', type=str, default='train', help='Compute normalization values from train or valid?')
 
     # tgb - 3/29/2021 - Optional path to read percentile distribution
-    p.add('--path_PERC',type=str,default=None,help='Path to the pickled percentile array file describing the univariate output distribution')
+    p.add('--path_PERC',type=str,default=None,help='Path to the pickled percentile array file describing the univariate output distribution for the training set')
+    p.add('--path_PERC_val',type=str,default=None,help='Path to the pickled percentile array file describing the univariate output distribution for the validation set')
+    
+    # tgb - 4/18/2021 - Real-geography flag
+    p.add('--real_geography', type=bool, default=False, help='Flag indicating if Earth-like simulation (True) or not (False/None).')
     
     # If the files to open are provided as a list
     p.add('--list', dest='list', action='store_true', help='Provide files names as a list.')

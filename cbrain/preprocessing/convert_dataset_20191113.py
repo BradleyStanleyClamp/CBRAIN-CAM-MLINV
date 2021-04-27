@@ -61,6 +61,30 @@ def compute_perc(ds, var, PERC_array, quantile_array):
         
     return (output_percentile+0*var0**0) # Convert from numpy back to xarray
 
+# tgb - 4/24/2021 - Real geograpny version taking into account new output vector shape
+def compute_perc_RG(ds, var, PERC_array, quantile_array):
+    
+    from scipy.interpolate import interp1d
+    
+    # Load variable from dataset
+    var0 = ds[var[:-4]][1:]
+    # Manually entering ranges for each variable: 
+    # This should change and PERC_array should be a dictionary with variable names
+    i0 = {}
+    i0['PTEQ'] = 64
+    i0['PTTEND'] = 94
+    i0['QRL'] = 124
+    i0['QRS'] = 154
+    
+    # Project onto 1D percentile space to form the output
+    output_percentile = np.zeros(var0.shape) # Initialization
+    for ilev in range(var0.shape[1]):
+        print('Interpolating level ',ilev,'out of ',var0.shape[1])
+        interp_fx = interp1d(x=PERC_array[:,i0[var[:-4]]+ilev],y=quantile_array,bounds_error=False)
+        output_percentile[:,ilev,:,:] = interp_fx(var0[:,ilev,:,:])
+        
+    return (output_percentile+0*var0**0) # Convert from numpy back to xarray
+
 def compute_RH(ds):
     # tgb - 11/13/2019 - Calculates Relative humidity following notebook 027
     def RH(T,qv,P0,PS,hyam,hybm):
@@ -517,7 +541,7 @@ def load_O3_AQUA(ds):
     
     return (O3_reshaped+0*dT**0) # Make sure it is in xarray Dataset format with right dimensions
 
-def create_stacked_da(ds, vars, PERC_array = None, quantile_array = None):
+def create_stacked_da(ds, vars, PERC_array = None, quantile_array = None, real_geography = None):
     """
     In this function the derived variables are computed and the right time steps are selected.
 
@@ -538,9 +562,20 @@ def create_stacked_da(ds, vars, PERC_array = None, quantile_array = None):
         elif 'FLUX' in var:
             da = compute_flux(ds,var)
         elif 'BP' in var:
-            da = compute_bp(ds, var)
+            if real_geography:
+                da = ds[var][1:]
+            else:
+                da = compute_bp(ds, var)
         elif 'PERC' in var:
-            da = compute_perc(ds, var, PERC_array, quantile_array)
+            print('PERC script: var is ',var,'real_geography is ',real_geography)
+            if real_geography and var=='PHQPERC':
+                da = compute_perc_RG(ds,'PTEQPERC', PERC_array, quantile_array)
+            elif real_geography and var=='TPHYSTNDPERC':
+                da = compute_perc_RG(ds,'PTTENDPERC', PERC_array, quantile_array)
+            elif real_geography:
+                da = compute_perc_RG(ds, var, PERC_array, quantile_array)
+            else:
+                da = compute_perc(ds, var, PERC_array, quantile_array)
         elif var in ['LHFLX', 'SHFLX']:
             da = ds[var][:-1]
         elif var == 'PRECST':
@@ -579,7 +614,10 @@ def create_stacked_da(ds, vars, PERC_array = None, quantile_array = None):
             da = compute_SHF_nsDELT(ds,1) # For now, hardcore eps=1K
         elif var == 'O3_AQUA':
             da = load_O3_AQUA(ds)
-        
+        elif real_geography and var == 'PHQ':
+            da = ds['PTEQ'][1:]
+        elif real_geography and var == 'TPHYSTND':
+            da = ds['PTTEND'][1:]
         elif 'dt_adiabatic' in var:
             base_var = var[:-12] + 'AP'
             da = compute_adiabatic(ds, base_var)
@@ -651,7 +689,7 @@ def reshape_da(da):
     return da.transpose('sample', 'var_names')
 
 
-def preprocess(in_dir, in_fns, out_dir, out_fn, vars, lev_range=(0, 30), path_PERC = None):
+def preprocess(in_dir, in_fns, out_dir, out_fn, vars, lev_range=(0, 30), path_PERC = None, real_geography = False):
     """
     This is the main script that preprocesses one file.
 
@@ -682,7 +720,19 @@ def preprocess(in_dir, in_fns, out_dir, out_fn, vars, lev_range=(0, 30), path_PE
     ds = ds.isel(lev=slice(*lev_range, 1))
 
     logging.info('Create stacked dataarray')
-    da = create_stacked_da(ds, vars, PERC_array = PERC_array, quantile_array = quantile_array)
+    logging.info(f'Real geography flag set to {real_geography}')    
+    if real_geography:
+        logging.info('Earth-like simulation detected')
+        if path_PERC:
+            da = create_stacked_da(ds, vars, PERC_array = PERC_array, quantile_array = quantile_array, real_geography=real_geography)
+        else:
+            da = create_stacked_da(ds, vars, real_geography=real_geography)
+    else:
+        logging.info('Aquaplanet simulation detected')
+        if path_PERC:
+            da = create_stacked_da(ds, vars, PERC_array = PERC_array, quantile_array = quantile_array)
+        else:
+            da = create_stacked_da(ds, vars)
 
     logging.info('Stack and reshape dataarray')
     da = reshape_da(da).reset_index('sample')
