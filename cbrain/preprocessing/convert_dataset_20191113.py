@@ -9,6 +9,7 @@ tgb - 11/13/2019 - Adding RH and deviation from moist adiabat
 from ..imports import *
 from ..cam_constants import *
 import pickle
+import scipy.integrate as sin
 
 # Set up logging, mainly to get timings easily.
 logging.basicConfig(
@@ -220,6 +221,67 @@ def compute_BCONS(ds):
     return G*(theta_e_calc(TBP,QBP,ds['P0'],ds['PS'][1:,:,:],ds['hyam'],ds['hybm'])[:,-1,:,:]-\
               theta_e_sat_calc(TBP,QBP,ds['P0'],ds['PS'][1:,:,:],ds['hyam'],ds['hybm']))/\
 theta_e_sat_calc(TBP,QBP,ds['P0'],ds['PS'][1:,:,:],ds['hyam'],ds['hybm'])   
+
+# tgb - 06/15/2021 - Calculates MSE-based buoyancy following Fiaz's derivation
+def compute_BMSE(ds):
+    
+    def esat(T):
+        T0 = 273.16
+        T00 = 253.16
+        omega = np.maximum(0,np.minimum(1,(T-T00)/(T0-T00)))
+
+        return (T>T0)*eliq(T)+(T<T00)*eice(T)+(T<=T0)*(T>=T00)*(omega*eliq(T)+(1-omega)*eice(T))
+    def eliq(T):
+        a_liq = np.array([-0.976195544e-15,-0.952447341e-13,0.640689451e-10,0.206739458e-7,0.302950461e-5,0.264847430e-3,0.142986287e-1,0.443987641,6.11239921]);
+        c_liq = -80
+        T0 = 273.16
+        return 100*np.polyval(a_liq,np.maximum(c_liq,T-T0))
+    def eice(T):
+        a_ice = np.array([0.252751365e-14,0.146898966e-11,0.385852041e-9,0.602588177e-7,0.615021634e-5,0.420895665e-3,0.188439774e-1,0.503160820,6.11147274]);
+        c_ice = np.array([273.15,185,-100,0.00763685,0.000151069,7.48215e-07])
+        T0 = 273.16
+        return (T>c_ice[0])*eliq(T)+\
+    (T<=c_ice[0])*(T>c_ice[1])*100*np.polyval(a_ice,T-T0)+\
+    (T<=c_ice[1])*100*(c_ice[3]+np.maximum(c_ice[2],T-T0)*(c_ice[4]+np.maximum(c_ice[2],T-T0)*c_ice[5]))
+    
+    def qv(T,RH,P0,PS,hyam,hybm):
+        R = 287
+        Rv = 461
+        p = (hyam*P0+hybm*PS).values # Total pressure (Pa)
+
+        return R*esat(T)*RH/(Rv*p)
+
+    def qsat(T,P0,PS,hyam,hybm):
+        return qv(T,1,P0,PS,hyam,hybm)
+    
+    TBP = compute_bp(ds,'TBP')
+    QBP = compute_bp(ds,'QBP')
+    
+    QSAT0 = qsat(TBP,ds['P0'],ds['PS'][1:,:,:],ds['hyam'],ds['hybm'])
+    
+    def geopotential(T,qv,P0,PS,hyam,hybm):
+        # Ideal gas law -> rho=p(R_d*T_v)
+        eps = 0.622 # Ratio of molecular weight(H2O)/molecular weight(dry air)
+        R_D = 287 # Specific gas constant of dry air in J/K/kg
+
+        r = qv/(qv**0-qv)
+        Tv = T*(r**0+r/eps)/(r**0+r)
+        p = (hyam*P0+hybm*PS).values # Total pressure (Pa)
+        RHO = p/(R_D*Tv)
+
+        Z = -sin.cumtrapz(x=p,y=1/(G*RHO),axis=1)
+        Z = np.concatenate((0*Z[:,0:1,:,:]**0,Z),axis=1)
+        return Z-Z[:,[29],:,:]+2
+    
+    Rv = 461
+    kappa = 1+(L_V**2)*QSAT0/(Rv*C_P*(TBP**2))
+    
+    z0 = geopotential(TBP,QBP,ds['P0'],ds['PS'][1:,:,:],ds['hyam'],ds['hybm'])
+    
+    h_plume = C_P*TBP[:,-1,:,:]+L_V*QBP[:,-1,:,:]
+    h_satenv = C_P*TBP+L_V*QBP+G*z0 
+    
+    return (G/kappa)*(h_plume-h_satenv)/(C_P*TBP)
 
 def compute_dRH_dt(ds):
 # tgb - 12/01/2019 - Calculates dRH/dt following 027 and compute_bp
@@ -602,6 +664,8 @@ def create_stacked_da(ds, vars, PERC_array = None, quantile_array = None, real_g
             da = compute_NSto220(ds)
         elif var == 'BCONS':
             da = compute_BCONS(ds)
+        elif var == 'BMSE':
+            da = compute_BMSE(ds)
         elif var == 'LR':
             da = compute_LR(ds)
         elif var == 'EPTNS':
@@ -738,7 +802,7 @@ def preprocess(in_dir, in_fns, out_dir, out_fn, vars, lev_range=(0, 30), path_PE
     da = reshape_da(da).reset_index('sample')
 
     logging.info(f'Save dataarray as {out_fn}')
-    da.to_netcdf(out_fn)
+    da.load().to_netcdf(out_fn)
 
     logging.info('Done!')
 

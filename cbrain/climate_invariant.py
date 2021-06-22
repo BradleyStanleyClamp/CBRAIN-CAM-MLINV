@@ -12,6 +12,7 @@ from tensorflow import math as tfm
 # import tensorflow_probability as tfp
 import yaml
 import pickle
+import scipy.integrate as sin
 
 path = '/export/nfs0home/tbeucler/CBRAIN-CAM/cbrain/'
 path_hyam = 'hyam_hybm.pkl'
@@ -481,7 +482,6 @@ class ThermLibNumpy:
     def theta_e_calc(T,qv,P0,PS,hyam,hybm):
         S = PS.shape
         p = P0 * np.tile(hyam,(S[0],1))+np.transpose(np.tile(PS,(30,1)))*np.tile(hybm,(S[0],1))
-        
         tmelt  = 273.15
         CPD = 1005.7
         CPV = 1870.0
@@ -490,7 +490,6 @@ class ThermLibNumpy:
         RD = 287.04
         EPS = RD/RV
         ALV0 = 2.501E6
-        
         r = qv / (1. - qv)
         # get ev in hPa 
         ev_hPa = 100*p*r/(EPS+r)
@@ -499,14 +498,36 @@ class ThermLibNumpy:
         #calc chi_e:
         chi_e = 0.2854 * (1. - (0.28*r))
         P0_norm = (P0/(P0 * np.tile(hyam,(S[0],1))+np.transpose(np.tile(PS,(30,1)))*np.tile(hybm,(S[0],1))))
-
         theta_e = T * P0_norm**chi_e * np.exp(((3.376/TL) - 0.00254) * r * 1000. * (1. + (0.81 * r)))
-
         return theta_e
-
+    
     @staticmethod
     def theta_e_sat_calc(T,P0,PS,hyam,hybm):
         return ThermLibNumpy.theta_e_calc(T,ThermLibNumpy.qsatNumpy(T,P0,PS,hyam,hybm),P0,PS,hyam,hybm) 
+    
+    @staticmethod
+    def bmse_calc(T,qv,P0,PS,hyam,hybm):
+        eps = 0.622 # Ratio of molecular weight(H2O)/molecular weight(dry air)
+        R_D = 287 # Specific gas constant of dry air in J/K/kg
+        Rv = 461
+        # Calculate kappa
+        QSAT0 = ThermLibNumpy.qsatNumpy(T,P0,PS,hyam,hybm)
+        kappa = 1+(L_V**2)*QSAT0/(Rv*C_P*(T**2))
+        # Calculate geopotential
+        r = qv/(qv**0-qv)
+        Tv = T*(r**0+r/eps)/(r**0+r)
+        p = P0 * hyam + PS[:, None] * hybm
+        p = p.astype(np.float32)
+        RHO = p/(R_D*Tv)
+        Z = -sin.cumtrapz(x=p,y=1/(G*RHO),axis=1)
+        Z = np.concatenate((0*Z[:,0:1]**0,Z),axis=1)
+        # Assuming near-surface is at 2 meters
+        Z = (Z-Z[:,[29]])+2 
+        # Calculate MSEs of plume and environment
+        Tile_dim = [1,30]
+        h_plume = np.tile(np.expand_dims(C_P*T[:,-1]+L_V*qv[:,-1],axis=1),Tile_dim)
+        h_satenv = C_P*T+L_V*qv+G*Z
+        return (G/kappa)*(h_plume-h_satenv)/(C_P*T)
 
 class QV2RHNumpy:
     def __init__(self, inp_sub, inp_div, inp_subRH, inp_divRH, hyam, hybm):
@@ -520,17 +541,14 @@ class QV2RHNumpy:
         self.PS_idx = 60
         self.SHFLX_idx = 62
         self.LHFLX_idx = 63
-
     def process(self,X):
         Tprior = X[:,self.TBP_idx]*self.inp_div[self.TBP_idx]+self.inp_sub[self.TBP_idx]
         qvprior = X[:,self.QBP_idx]*self.inp_div[self.QBP_idx]+self.inp_sub[self.QBP_idx]
         PSprior = X[:,self.PS_idx]*self.inp_div[self.PS_idx]+self.inp_sub[self.PS_idx]
         RHprior = (ThermLibNumpy.RHNumpy(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)-\
                     self.inp_subRH[self.QBP_idx])/self.inp_divRH[self.QBP_idx]
-
         X_result = np.concatenate([RHprior.astype(np.float32),X[:,30:]], axis=1)
         return X_result
-    
 class QV2QSATdeficitNumpy:
     def __init__(self, inp_sub, inp_div, inp_subQ, inp_divQ, hyam, hybm):
         self.inp_sub, self.inp_div, self.inp_subQ, self.inp_divQ, self.hyam, self.hybm = \
@@ -543,17 +561,14 @@ class QV2QSATdeficitNumpy:
         self.PS_idx = 60
         self.SHFLX_idx = 62
         self.LHFLX_idx = 63
-
     def process(self,X):
         Tprior = X[:,self.TBP_idx]*self.inp_div[self.TBP_idx]+self.inp_sub[self.TBP_idx]
         qvprior = X[:,self.QBP_idx]*self.inp_div[self.QBP_idx]+self.inp_sub[self.QBP_idx]
         PSprior = X[:,self.PS_idx]*self.inp_div[self.PS_idx]+self.inp_sub[self.PS_idx]
         QSATdeficitprior = (ThermLibNumpy.qsatNumpy(Tprior,P0,PSprior,self.hyam,self.hybm)-\
                             qvprior-self.inp_subQ[self.QBP_idx])/self.inp_divQ[self.QBP_idx]
-
         X_result = np.concatenate([QSATdeficitprior.astype(np.float32),X[:,30:]], axis=1)
         return X_result
-    
 class T2TmTNSNumpy:
     def __init__(self, inp_sub, inp_div, inp_subTNS, inp_divTNS, hyam, hybm):
         self.inp_sub, self.inp_div, self.inp_subTNS, self.inp_divTNS, self.hyam, self.hybm = \
@@ -566,21 +581,15 @@ class T2TmTNSNumpy:
         self.PS_idx = 60
         self.SHFLX_idx = 62
         self.LHFLX_idx = 63
-    
     def process(self,X):
         Tprior = X[:,self.TBP_idx]*self.inp_div[self.TBP_idx]+self.inp_sub[self.TBP_idx]
-
         Tile_dim = [1,30]
         TNSprior = ((Tprior-np.tile(np.expand_dims(Tprior[:,-1],axis=1),Tile_dim))-\
                     self.inp_subTNS[self.TBP_idx])/\
         self.inp_divTNS[self.TBP_idx]
-
         post = np.concatenate([X[:,:30],TNSprior.astype(np.float32),X[:,60:]], axis=1)
-
         X_result = post
         return X_result
-    
-
 class T2BCONSNumpy:
     def __init__(self, inp_sub, inp_div, inp_subT, inp_divT, hyam, hybm):
         self.inp_sub, self.inp_div, self.inp_subT, self.inp_divT, self.hyam, self.hybm = \
@@ -593,25 +602,68 @@ class T2BCONSNumpy:
         self.PS_idx = 60
         self.SHFLX_idx = 62
         self.LHFLX_idx = 63
-        
     def process(self,X):
         Tprior = X[:,self.TBP_idx]*self.inp_div[self.TBP_idx]+self.inp_sub[self.TBP_idx]
         qvprior = X[:,self.QBP_idx]*self.inp_div[self.QBP_idx]+self.inp_sub[self.QBP_idx]
         PSprior = X[:,self.PS_idx]*self.inp_div[self.PS_idx]+self.inp_sub[self.PS_idx]
-        
         theta = ThermLibNumpy.theta_e_calc(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)
         Tile_dim = [1,30]
         thetaS = ThermLibNumpy.theta_e_calc(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)[:,-1]
-        
         Bcons = G*(np.tile(np.expand_dims(thetaS,axis=1),Tile_dim)-\
                    ThermLibNumpy.theta_e_sat_calc(Tprior,P0,PSprior,self.hyam,self.hybm))/\
         ThermLibNumpy.theta_e_sat_calc(Tprior,P0,PSprior,self.hyam,self.hybm)
         Bconsprior = (Bcons-self.inp_subT[self.TBP_idx])/self.inp_divT[self.TBP_idx]
-
         post = np.concatenate([X[:,:30],Bconsprior.astype(np.float32),X[:,60:]], axis=1)
-
         X_result = post
         return X_result
+class T2BMSENumpy:
+    def __init__(self, inp_sub, inp_div, inp_subT, inp_divT, hyam, hybm):
+        self.inp_sub, self.inp_div, self.inp_subT, self.inp_divT, self.hyam, self.hybm = \
+            np.array(inp_sub), np.array(inp_div), np.array(inp_subT), np.array(inp_divT), \
+        np.array(hyam), np.array(hybm)
+        # Define variable indices here
+        # Input
+        self.QBP_idx = slice(0,30)
+        self.TBP_idx = slice(30,60)
+        self.PS_idx = 60
+        self.SHFLX_idx = 62
+        self.LHFLX_idx = 63
+    def process(self,X):
+        Tprior = X[:,self.TBP_idx]*self.inp_div[self.TBP_idx]+self.inp_sub[self.TBP_idx]
+        qvprior = X[:,self.QBP_idx]*self.inp_div[self.QBP_idx]+self.inp_sub[self.QBP_idx]
+        PSprior = X[:,self.PS_idx]*self.inp_div[self.PS_idx]+self.inp_sub[self.PS_idx]
+        Bmse = ThermLibNumpy.bmse_calc(Tprior,qvprior,P0,PSprior,self.hyam,self.hybm)
+        Bmseprior = (Bmse-self.inp_subT[self.TBP_idx])/self.inp_divT[self.TBP_idx]
+        post = np.concatenate([X[:,:30],Bmseprior.astype(np.float32),X[:,60:]], axis=1)
+        X_result = post
+        return X_result
+class T2T_NSto220Numpy:
+    def __init__(self, inp_sub, inp_div, inp_subTNS220, inp_divTNS220, hyam, hybm):
+        self.inp_sub, self.inp_div, self.inp_subTNS220, self.inp_divTNS220, self.hyam, self.hybm = \
+            np.array(inp_sub), np.array(inp_div), np.array(inp_subTNS220), np.array(inp_divTNS220), \
+        np.array(hyam), np.array(hybm)
+        # Define variable indices here
+        # Input
+        self.QBP_idx = slice(0,30)
+        self.TBP_idx = slice(30,60)
+        self.PS_idx = 60
+        self.SHFLX_idx = 62
+        self.LHFLX_idx = 63
+        self.T_trop = 220 # In K
+    
+    def process(self,X):
+        Tprior = X[:,self.TBP_idx]*self.inp_div[self.TBP_idx]+self.inp_sub[self.TBP_idx]
+
+        Tile_dim = [1,30]
+        TNS = np.tile(np.expand_dims(Tprior[:,-1],axis=1),Tile_dim)
+        TNS220tonorm = (TNS-Tprior)/(TNS-self.T_trop)
+        TNS220prior = (TNS220tonorm-self.inp_subTNS220[self.TBP_idx])/self.inp_divTNS220[self.TBP_idx]
+
+        post = np.concatenate([X[:,:30],TNS220prior.astype(np.float32),X[:,60:]], axis=1)
+
+        X_result = post
+        return X_result    
+
     
 class SHF2SHF_nsDELTNumpy:
     def __init__(self, inp_sub, inp_div, inp_subSHF, inp_divSHF, hyam, hybm, epsilon):
@@ -907,192 +959,7 @@ class InterpolationNumpy:
         return X_processed
 
 #################################################################################################################
-
-class DataGeneratorClimInv(DataGenerator):
-
-    def __init__(self, data_fn, input_vars, output_vars,
-             norm_fn=None, input_transform=None, output_transform=None,
-             batch_size=1024, shuffle=True, xarray=False, var_cut_off=None, 
-             rh_trans=True,t2tns_trans=True,
-             lhflx_trans=True,
-             scaling=True,interpolate=True,
-             hyam=None,hybm=None,
-             inp_subRH=None,inp_divRH=None,
-             inp_subTNS=None,inp_divTNS=None,
-             lev=None, interm_size=40,
-             lower_lim=6,
-             is_continous=True,Tnot=5,
-                mode='train', exp=None):
-        self.scaling = scaling
-        self.interpolate = interpolate
-        self.rh_trans = rh_trans
-        self.t2tns_trans = t2tns_trans
-        self.lhflx_trans = lhflx_trans
-        self.inp_shape = 64
-        self.exp = exp
-        self.mode=mode
-        super().__init__(data_fn, input_vars,output_vars,norm_fn,input_transform,output_transform,
-                        batch_size,shuffle,xarray,var_cut_off) ## call the base data generator
-        self.inp_sub = self.input_transform.sub
-        self.inp_div = self.input_transform.div
-        if rh_trans:
-            self.qv2rhLayer = QV2RHNumpy(self.inp_sub,self.inp_div,inp_subRH,inp_divRH,hyam,hybm)
-
-        if lhflx_trans:
-            self.lhflxLayer = LhflxTransNumpy(self.inp_sub,self.inp_div,hyam,hybm)
-
-        if t2tns_trans:
-            self.t2tnsLayer = T2TmTNSNumpy(self.inp_sub,self.inp_div,inp_subTNS,inp_divTNS,hyam,hybm)
-
-        if scaling:
-            self.scalingLayer = ScalingNumpy(hyam,hybm)
-            self.inp_shape += 1
-
-        if interpolate:
-            self.interpLayer = InterpolationNumpy(lev,is_continous,Tnot,lower_lim,interm_size)
-            self.inp_shape += interm_size*2 + 4 + 30 ## 4 same as 60-64 and 30 for lev_tilde.size
-
-
-
-    def __getitem__(self, index):
-        # Compute start and end indices for batch
-        start_idx = index * self.batch_size
-        end_idx = start_idx + self.batch_size
-
-        # Grab batch from data
-        batch = self.data_ds['vars'][start_idx:end_idx]
-
-        # Split into inputs and outputs
-        X = batch[:, self.input_idxs]
-        Y = batch[:, self.output_idxs]
-        # Normalize
-        X_norm = self.input_transform.transform(X)
-        Y = self.output_transform.transform(Y)
-        X_result = X_norm
-        if self.exp:
-            if self.exp['LHFLX']:
-                if self.lhflx_trans:
-                    X_result = self.lhflxLayer.process(X_result)
-                    X_result = X_result[:,:64]
-                    X = X[:,:64]
-
-                if self.rh_trans:
-                    X_result = self.qv2rhLayer.process(X_result)
-                    
-                
-               
-                if self.t2tns_trans:
-                    X_result = self.t2tnsLayer.process(X_result)
-                    
-            else:
-                if self.rh_trans:
-                    X_result = self.qv2rhLayer.process(X_result) 
-                
-                
-               
-                if self.t2tns_trans:
-                    X_result = self.t2tnsLayer.process(X_result)
-                    
-                if self.lhflx_trans:
-                    X_result = self.lhflxLayer.process(X_result)
-                    X_result = X_result[:,:64]
-                    X = X[:,:64]
-
-
-        else:
-            if self.rh_trans:
-                X_result = self.qv2rhLayer.process(X_result)
-            
-               
-            if self.t2tns_trans:
-                X_result = self.t2tnsLayer.process_V1(X_result)
-                
-            if self.lhflx_trans:
-                X_result = self.lhflxLayer.process_V1(X_result)
-                X_result = X_result[:,:64]
-                X = X[:,:64]
-
-
-        if self.scaling:
-            scalings = self.scalingLayer.process(X)
-            X_result = np.hstack((X_result,scalings))
-
-        if self.interpolate:
-            interpolated = self.interpLayer.process(X,X_result)
-            X_result = np.hstack((X_result,interpolated))
-
-
-        if self.mode=='val':
-            return xr.DataArray(X_result), xr.DataArray(Y)
-        return X_result,Y
-
-    ##transforms the input data into the required format, take the unnormalized dataset
-    def transform(self,X):
-        X_norm = self.input_transform.transform(X)
-        X_result = X_norm
-
-        if self.exp:
-            if self.exp['LHFLX']:
-                if self.lhflx_trans:
-                    X_result = self.lhflxLayer.process(X_result)
-                    X_result = X_result[:,:64]
-                    X = X[:,:64]
-
-                if self.rh_trans:
-                    X_result = self.qv2rhLayer.process(X_result)
-                    
-                
-               
-                if self.t2tns_trans:
-                    X_result = self.t2tnsLayer.process(X_result)
-                    
-            else:
-                if self.rh_trans:
-                    X_result = self.qv2rhLayer.process(X_result) 
-                
-                
-               
-                if self.t2tns_trans:
-                    X_result = self.t2tnsLayer.process(X_result)
-                    
-                if self.lhflx_trans:
-                    X_result = self.lhflxLayer.process(X_result)
-                    X_result = X_result[:,:64]
-                    X = X[:,:64]
-
-
-        else:
-            if self.rh_trans:
-                X_result = self.qv2rhLayer.process(X_result)
-            
-               
-            if self.t2tns_trans:
-                X_result = self.t2tnsLayer.process_V1(X_result)
-                
-            if self.lhflx_trans:
-                X_result = self.lhflxLayer.process_V1(X_result)
-                X_result = X_result[:,:64]
-                X = X[:,:64]
-
-
-        if self.scaling:
-            scalings = self.scalingLayer.process(X)
-            X_result = np.hstack((X_result,scalings))
-
-        if self.interpolate:
-            interpolated = self.interpLayer.process(X,X_result)
-            X_result = np.hstack((X_result,interpolated))
-
-
-        return X_result
-
-# tgb - 2/26/2021 - New more general class to test different transformations
-##############################################################################
-
-#################################################################################################################
-
 class DataGeneratorCI(DataGenerator):
-
     def __init__(self, data_fn, input_vars, output_vars,
              norm_fn=None, input_transform=None, output_transform=None,
              batch_size=1024, shuffle=True, xarray=False, var_cut_off=None, 
@@ -1123,42 +990,36 @@ class DataGeneratorCI(DataGenerator):
                         batch_size,shuffle,xarray,var_cut_off) ## call the base data generator
         self.inp_sub = self.input_transform.sub
         self.inp_div = self.input_transform.div
-        
         if Qscaling=='RH':
             self.QLayer = QV2RHNumpy(self.inp_sub,self.inp_div,inp_sub_Qscaling,inp_div_Qscaling,hyam,hybm)
         elif Qscaling=='QSATdeficit':
             self.QLayer = QV2QSATdeficitNumpy(self.inp_sub,self.inp_div,inp_sub_Qscaling,inp_div_Qscaling,hyam,hybm)
-        
         if Tscaling=='TfromNS':
             self.TLayer = T2TmTNSNumpy(self.inp_sub,self.inp_div,inp_sub_Tscaling,inp_div_Tscaling,hyam,hybm)
         elif Tscaling=='BCONS':
             self.TLayer = T2BCONSNumpy(self.inp_sub,self.inp_div,inp_sub_Tscaling,inp_div_Tscaling,hyam,hybm)
-        
+        elif Tscaling=='BMSE':
+            self.TLayer = T2BMSENumpy(self.inp_sub,self.inp_div,inp_sub_Tscaling,inp_div_Tscaling,hyam,hybm)
+        elif Tscaling=='T_NSto220':
+            self.TLayer = T2T_NSto220Numpy(self.inp_sub,self.inp_div,inp_sub_Tscaling,inp_div_Tscaling,hyam,hybm)
         if LHFscaling=='LHF_nsDELQ':
             self.LHFLayer = LHF2LHF_nsDELQNumpy(self.inp_sub,self.inp_div,inp_sub_LHFscaling,inp_div_LHFscaling,hyam,hybm,epsQ)
         elif LHFscaling=='LHF_nsQ':
             self.LHFLayer = LHF2LHF_nsQNumpy(self.inp_sub,self.inp_div,inp_sub_LHFscaling,inp_div_LHFscaling,hyam,hybm,epsQ)
-            
         if SHFscaling=='SHF_nsDELT':
             self.SHFLayer = SHF2SHF_nsDELTNumpy(self.inp_sub,self.inp_div,inp_sub_SHFscaling,inp_div_SHFscaling,hyam,hybm,epsT)
-
         if output_scaling:
             self.scalingLayer = ScalingNumpy(hyam,hybm)
             self.inp_shape += 1
-
         if interpolate:
             self.interpLayer = InterpolationNumpy(lev,is_continous,Tnot,lower_lim,interm_size)
             self.inp_shape += interm_size*2 + 4 + 30 ## 4 same as 60-64 and 30 for lev_tilde.size
-
-
     def __getitem__(self, index):
         # Compute start and end indices for batch
         start_idx = index * self.batch_size
         end_idx = start_idx + self.batch_size
-
         # Grab batch from data
         batch = self.data_ds['vars'][start_idx:end_idx]
-
         # Split into inputs and outputs
         X = batch[:, self.input_idxs]
         Y = batch[:, self.output_idxs]
@@ -1166,13 +1027,11 @@ class DataGeneratorCI(DataGenerator):
         X_norm = self.input_transform.transform(X)
         Y = self.output_transform.transform(Y)
         X_result = np.copy(X_norm)
-
         if self.Qscaling:
             X_result = self.QLayer.process(X_result)
-
         if self.Tscaling:
             # tgb - 3/21/2021 - BCONS needs qv in kg/kg as an input
-            if self.Tscaling=='BCONS':
+            if self.Tscaling=='BCONS' or self.Tscaling=='BMSE':
                 if self.Qscaling:
                     X_resultT = self.TLayer.process(X_norm)
                     X_result = np.concatenate([X_result[:,:30],X_resultT[:,30:60],X_result[:,60:]], axis=1)
@@ -1180,10 +1039,8 @@ class DataGeneratorCI(DataGenerator):
                     X_result = self.TLayer.process(X_result)
             else:
                 X_result = self.TLayer.process(X_result)
-            
         if self.SHFscaling:
             X_result = self.SHFLayer.process(X_result)
-
         if self.LHFscaling:
             # tgb - 3/22/2021 - LHF_ns(DEL)Q needs qv in kg/kg and T in K
             if self.Qscaling or self.Tscaling:
@@ -1191,47 +1048,34 @@ class DataGeneratorCI(DataGenerator):
                 X_result = np.concatenate([X_result[:,:60],X_resultLHF[:,60:]],axis=1)
             else:
                 X_result = self.LHFLayer.process(X_result)
-
         if self.output_scaling:
             scalings = self.scalingLayer.process(X)
             X_result = np.hstack((X_result,scalings))
-
         if self.interpolate:
             interpolated = self.interpLayer.process(X,X_result)
             X_result = np.hstack((X_result,interpolated))
-
         if self.mode=='val':
             return xr.DataArray(X_result), xr.DataArray(Y)
         return X_result,Y
-
     ##transforms the input data into the required format, take the unnormalized dataset
     def transform(self,X):
         X_norm = self.input_transform.transform(X)
         X_result = X_norm
-        
         if self.Qscaling:
             X_result = self.QLayer.process(X_result)
-
         if self.Tscaling:
             X_result = self.TLayer.process(X_result)
-
         if self.SHFscaling:
             X_result = self.SHFLayer.process(X_result)
-            
         if self.LHFscaling:
             X_result = self.LHFLayer.process(X_result)
-            
         if self.scaling:
             scalings = self.scalingLayer.process(X)
             X_result = np.hstack((X_result,scalings))
-
         if self.interpolate:
             interpolated = self.interpLayer.process(X,X_result)
             X_result = np.hstack((X_result,interpolated))
-
         return X_result
-    
-    
 ######################            Class for model diagnostics      #################
 class ClimateNet:
     def __init__(self,dict_lay,data_fn,config_fn,
