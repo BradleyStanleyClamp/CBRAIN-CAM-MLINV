@@ -1,0 +1,13 @@
+# Describe this dataset
+vars : [RH, BMSE, PS, SOLIN, SHFLX, LHF_nsDELQ, PHQ, TPHYSTND, FSNT, FSNS, FLNT, FLNS, PRECT]
+
+in_dir : /DFS-L/DATA/pritchard/tbeucler/SPCAM/fluxbypass_aqua/
+in_fns : AndKua_aqua_SPCAM3.0_sp_fbp_f4.cam2.h1.0001-0[1-4]-*-*.nc
+
+out_dir: /DFS-L/DATA/pritchard/tbeucler/SPCAM/SPCAM_PHYS/
+out_fn: 2021_09_03_TRAIN_For_Nando_ClInv.nc
+
+shuffle: True
+
+val_in_fns: AndKua_aqua_SPCAM3.0_sp_fbp_f4.cam2.h1.0001-0[5-8]-*-*.nc
+val_out_fn: 2021_09_03_VALID_For_Nando_ClInv.nc
