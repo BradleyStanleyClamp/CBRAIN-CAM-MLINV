@@ -1,0 +1,13 @@
+# Describe this dataset
+vars : [QBP, TBP, O3_AQUA, PS, SOLIN, SHFLX, LHFLX, PHQ, TPHYSTND, QRL, QRS]
+
+in_dir : /DFS-L/DATA/pritchard/tbeucler/SPCAM/sp8fbp_minus4k/
+in_fns : sp8fbp_minus4k.cam2.h2.0001-0[1-4]-*-*.nc
+
+out_dir: /DFS-L/DATA/pritchard/tbeucler/SPCAM/SPCAM_PHYS/
+out_fn: 2021_03_18_O3_TRAIN_M4K.nc
+
+shuffle: True
+
+val_in_fns: sp8fbp_minus4k.cam2.h2.0001-0[5-8]-*-*.nc
+val_out_fn: 2021_03_18_O3_VALID_M4K.nc

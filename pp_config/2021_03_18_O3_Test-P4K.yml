@@ -1,0 +1,15 @@
+# Describe this dataset
+vars : [QBP, TBP, O3_AQUA, PS, SOLIN, SHFLX, LHFLX, PHQ, TPHYSTND, QRL, QRS]
+
+in_dir : /DFS-L/DATA/pritchard/tbeucler/SPCAM/sp8fbp_4k/
+in_fns : sp8fbp_4k.cam2.h2.0000-0[6-9]-*-*.nc
+#in_fns: 
+
+out_dir: /DFS-L/DATA/pritchard/tbeucler/SPCAM/SPCAM_PHYS/
+out_fn: 2021_03_18_O3_TEST_P4K.nc
+
+shuffle: False
+# list: True
+# list_xr1: /DFS-L/DATA/pritchard/tbeucler/SPCAM/fluxbypass_aqua/AndKua_aqua_SPCAM3.0_sp_fbp_f4.cam2.h1.0001-09-*-*.nc
+# list_xr2: /DFS-L/DATA/pritchard/tbeucler/SPCAM/fluxbypass_aqua/AndKua_aqua_SPCAM3.0_sp_fbp_f4.cam2.h1.0001-1?-*-*.nc
+# list_xr: ['/DFS-L/DATA/pritchard/tbeucler/SPCAM/fluxbypass_aqua/AndKua_aqua_SPCAM3.0_sp_fbp_f4.cam2.h1.0001-09-*-*.nc','/DFS-L/DATA/pritchard/tbeucler/SPCAM/fluxbypass_aqua/AndKua_aqua_SPCAM3.0_sp_fbp_f4.cam2.h1.0001-1?-*-*.nc']
