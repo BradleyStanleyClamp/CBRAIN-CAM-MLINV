@@ -17,10 +17,10 @@ The modified climate model code is available at https://gitlab.com/mspritch/spca
 
 ### Papers using this fork
 
-> Beucler, T., Pritchard, M., Yuval, J., Gupta, A., Peng, L., Rasp, S., 
+> (Submitted) Beucler, T., Pritchard, M., Yuval, J., Gupta, A., Peng, L., Rasp, S., 
 > Ahmed, F., O'Gorman, P.A., Neelin, J.D., Lutsko, N.J. and Gentine, P.: 
 > Climate-Invariant Machine Learning. 
-> (Submitted) arXiv preprint arXiv:2112.08440.
+> arXiv preprint arXiv:2112.08440.
 > https://arxiv.org/abs/2112.08440
 
 > Beucler, T., Pritchard, M., Rasp, S., Ott, J., Baldi, P., & Gentine, P.: 
@@ -37,7 +37,7 @@ The modified climate model code is available at https://gitlab.com/mspritch/spca
 > (Workshop) Beucler, T., Pritchard, M., Gentine, P., & Rasp, S.: 
 > Towards Physically-Consistent, Data-Driven Models of Convection. 
 > IEEE International Geoscience and Remote Sensing Symposium 2020. 
-> [arXiv pdf](https://arxiv.org/abs/2002.08525)
+> [arXiv pdf](https://arxiv.org/abs/2002.08525
 > https://ieeexplore.ieee.org/document/9324569
 
 > (Workshop) Beucler, T., Rasp, S., Pritchard, M., & Gentine, P.: 
