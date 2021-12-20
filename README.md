@@ -1,11 +1,12 @@
 # CBRAIN-CAM - a neural network climate model parameterization
+# Physically-constrained & Physically-informed fork 
 
-Author: Stephan Rasp - <raspstephan@gmail.com> - https://raspstephan.github.io
+Fork Author: Tom Beucler - <tom.beucler@gmail.com> - https://wp.unil.ch/dawn
+Main Repository Author: Stephan Rasp - <raspstephan@gmail.com> - https://raspstephan.github.io
 
-Hi, thanks for checking out this repository. This is a working repository, which means that the most corrent commit might not always be the most functional or documented. 
+Thank you for checking out this fork of the CBRAIN repository (https://github.com/raspstephan/CBRAIN-CAM), dedicated to building *physically-constrained and physically-informed* climate model parameterizations. This is a working fork in a working repository, which means that recent commits may not always be functional or documented. 
 
-**A Guide for collaborators**
-People hoping to collaborate with me on this project, please check out some guidelines here: https://github.com/raspstephan/CBRAIN-CAM/wiki/A-guide-for-collaborators
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5775489.svg)](https://doi.org/10.5281/zenodo.5775489)
 
 If you are looking for the version of the code that corresponds to the PNAS paper. Check out this release: https://github.com/raspstephan/CBRAIN-CAM/releases/tag/PNAS_final
 
@@ -14,7 +15,37 @@ If you are looking for the version of the code that corresponds to the PNAS pape
 The modified climate model code is available at https://gitlab.com/mspritch/spcam3.0-neural-net (branch: `nn_fbp_engy_ess`)
 
 
-### Papers
+### Papers using this fork
+
+> Beucler, T., Pritchard, M., Yuval, J., Gupta, A., Peng, L., Rasp, S., 
+> Ahmed, F., O'Gorman, P.A., Neelin, J.D., Lutsko, N.J. and Gentine, P.: 
+> Climate-Invariant Machine Learning. 
+> (Submitted) arXiv preprint arXiv:2112.08440.
+> https://arxiv.org/abs/2112.08440
+
+> Beucler, T., Pritchard, M., Rasp, S., Ott, J., Baldi, P., & Gentine, P.: 
+> Enforcing Analytic Constraints in Neural-Networks Emulating Physical Systems. 
+> Physical Review Letters, 126.9: 098302. Editors’ Suggestion. 
+> [arXiv pdf](https://arxiv.org/abs/1909.00912)
+> https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.126.098302
+
+> Brenowitz, N., T. Beucler, M. Pritchard & C. Bretherton: 
+> Interpreting and Stabilizing Machine-Learning Parametrizations of Convection. 
+> Journal of the Atmospheric Sciences, 77, 4357-4375.
+> https://journals.ametsoc.org/view/journals/atsc/77/12/jas-d-20-0082.1.xml
+
+> (Workshop) Beucler, T., Pritchard, M., Gentine, P., & Rasp, S.: 
+> Towards Physically-Consistent, Data-Driven Models of Convection. 
+> IEEE International Geoscience and Remote Sensing Symposium 2020. 
+> [arXiv pdf](https://arxiv.org/abs/2002.08525)
+> https://ieeexplore.ieee.org/document/9324569
+
+> (Workshop) Beucler, T., Rasp, S., Pritchard, M., & Gentine, P.: 
+> Achieving Conservation of Energy in Neural Network Emulators for Climate Modeling. 
+> 2019 International Conference on Machine Learning.
+> https://arxiv.org/abs/1906.06622
+
+### Papers using the main repository
 
 > S. Rasp, M. Pritchard and P. Gentine, 2018.
 > Deep learning to represent sub-grid processes in climate models
