@@ -642,6 +642,8 @@ def create_stacked_da(ds, vars, PERC_array = None, quantile_array = None, real_g
             da = ds[var][:-1]
         elif var == 'PRECST':
             da = (ds['PRECSC'] + ds['PRECSL'])[1:]
+        elif real_geography and var == 'PRECT':
+            da = (ds['NN2L_PRECC'] + ds['NN2L_PRECL'])[1:]
         elif var == 'PRECT':
             da = (ds['PRECC'] + ds['PRECL'])[1:]
         elif var == 'RH':
@@ -678,6 +680,9 @@ def create_stacked_da(ds, vars, PERC_array = None, quantile_array = None, real_g
             da = compute_SHF_nsDELT(ds,1) # For now, hardcore eps=1K
         elif var == 'O3_AQUA':
             da = load_O3_AQUA(ds)
+        elif var == 'TPHYSTND500':
+            if real_geography: da = ds['PTTEND'][1:,[18],:,:]
+            else: da = ds['TPHYSTND'][1:,[18],:,:]
         elif real_geography and var == 'PHQ':
             da = ds['PTEQ'][1:]
         elif real_geography and var == 'TPHYSTND':
@@ -685,6 +690,12 @@ def create_stacked_da(ds, vars, PERC_array = None, quantile_array = None, real_g
         elif 'dt_adiabatic' in var:
             base_var = var[:-12] + 'AP'
             da = compute_adiabatic(ds, base_var)
+        elif 't-dt' in var:
+            if real_geography and var == 'PRECTt-dt':
+                da = (ds['NN2L_PRECC'] + ds['NN2L_PRECL'])[:-1]
+            elif var == 'PRECTt-dt':
+                da = (ds['PRECC'] + ds['PRECL'])[:-1]
+            else: da = ds[var[:-4]][:-1]
         else:
             da = ds[var][1:]
         var_list.append(da)
