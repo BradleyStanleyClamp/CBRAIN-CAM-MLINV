@@ -30,10 +30,10 @@ def p_integral(var,pressure,partial,L=30):
     G = 9.8
     L = pressure.shape[1]
     
-    if partial == 'above': INT = cumtrapz(x=pressure,y=var,initial=0)/g
+    if partial == 'above': INT = cumtrapz(x=pressure,y=var,initial=0)/G
     elif partial == 'below': 
-        INT = np.outer(trapz(x=pressure,y=var)/g,np.arange(0,30)**0)-\
-        cumtrapz(x=pressure,y=var,initial=0)/g
+        INT = np.outer(trapz(x=pressure,y=var)/G,np.arange(0,30)**0)-\
+        cumtrapz(x=pressure,y=var,initial=0)/G
         
     return INT
 
@@ -61,7 +61,7 @@ def p_der_spline(var,pressure_data,pressure_eval,order,kind='cubic'):
     
     return output
 
-def subsampler(ind,x,xRH,xB,xLHFns,xt,yt,xRHt,xBt,xLHFnst,hyam,hybm,
+def subsampler(ind,x,y,xRH,xB,xLHFns,xt,yt,xRHt,xBt,xLHFnst,hyam,hybm,
                variables=['p','q','dq_dp','dq_dp_FD','d2q_dp2',
                          'd2q_dp2_FD','Q_above','Q_below','T',
                          'dT_dp','d2T_dp2','dT_dp_FD','d2T_dp2_FD',
@@ -97,36 +97,37 @@ def subsampler(ind,x,xRH,xB,xLHFns,xt,yt,xRHt,xBt,xLHFnst,hyam,hybm,
         xBt_sub[clim] = xBt[clim][ind,:]
         xLHFnst_sub[clim] = xLHFnst[clim][ind]
     # Pressure
+    P0 = 1e5 # Standard value in CBRAIN repository
     PS = x_sub[:,60]; pm = P0*hyam+np.outer(PS,hybm)
     # Training structure
     x_train = {}
     if 'p' in variables: x_train['p'] = pm
-    if 'q' in varaibles: x_train['q'] = x_sub[:,:30].values
+    if 'q' in variables: x_train['q'] = x_sub[:,:30].values
     if 'dq_dp' in variables: x_train['dq_dp'] = p_der_spline(x_train['q'],x_train['p'],x_train['p'],1)
-    if 'dq_dp_FD' in variables: x_train['dq_dp_FD'] = p_derivative(x_train['q'],x_train['p'],1)
+    if 'dq_dp_FD' in variables: x_train['dq_dp_FD'] = p_derivative(x_train['q'],x_train['p'])
     if 'd2q_dp2' in variables: x_train['d2q_dp2'] = p_der_spline(x_train['q'],x_train['p'],x_train['p'],2)
-    if 'd2q_dp2_FD' in variables: x_train['d2q_dp2_FD'] = p_derivative(x_train['dq_dp'],x_train['p'],1)
+    if 'd2q_dp2_FD' in variables: x_train['d2q_dp2_FD'] = p_derivative(x_train['dq_dp_FD'],x_train['p'])
     if 'Q_above' in variables: x_train['Q_above'] = p_integral(x_train['q'],x_train['p'],'above')
     if 'Q_below' in variables: x_train['Q_below'] = p_integral(x_train['q'],x_train['p'],'below')
     if 'T' in variables: x_train['T'] = x_sub[:,30:60].values
     if 'dT_dp' in variables: x_train['dT_dp'] = p_der_spline(x_train['T'],x_train['p'],x_train['p'],1)
     if 'd2T_dp2' in variables: x_train['d2T_dp2'] = p_der_spline(x_train['T'],x_train['p'],x_train['p'],2)
-    if 'dT_dp_FD' in variables: x_train['dT_dp_FD'] = p_derivative(x_train['T'],x_train['p'],1)
-    if 'd2T_dp2_FD' in variables: x_train['d2T_dp2_FD'] = p_derivative(x_train['dT_dp_FD'],x_train['p'],1)
+    if 'dT_dp_FD' in variables: x_train['dT_dp_FD'] = p_derivative(x_train['T'],x_train['p'])
+    if 'd2T_dp2_FD' in variables: x_train['d2T_dp2_FD'] = p_derivative(x_train['dT_dp_FD'],x_train['p'])
     if 'T_above' in variables: x_train['T_above'] = p_integral(x_train['T'],x_train['p'],'above')
     if 'T_below' in variables: x_train['T_below'] = p_integral(x_train['T'],x_train['p'],'below')
     if 'RH' in variables: x_train['RH'] = xRH_sub.values
     if 'dRH_dp' in variables: x_train['dRH_dp'] = p_der_spline(x_train['RH'],x_train['p'],x_train['p'],1)
-    if 'dRH_dp_FD' in variables: x_train['dRH_dp_FD'] = p_derivative(x_train['RH'],x_train['p'],1)
+    if 'dRH_dp_FD' in variables: x_train['dRH_dp_FD'] = p_derivative(x_train['RH'],x_train['p'])
     if 'd2RH_dp2' in variables: x_train['d2RH_dp2'] = p_der_spline(x_train['RH'],x_train['p'],x_train['p'],2)
-    if 'd2RH_dp2_FD' in variables: x_train['d2RH_dp2_FD'] = p_derivative(x_train['dRH_dp'],x_train['p'],1)
+    if 'd2RH_dp2_FD' in variables: x_train['d2RH_dp2_FD'] = p_derivative(x_train['dRH_dp_FD'],x_train['p'])
     if 'RH_above' in variables: x_train['RH_above'] = p_integral(x_train['RH'],x_train['p'],'above')
     if 'RH_below' in variables: x_train['RH_below'] = p_integral(x_train['RH'],x_train['p'],'below')
     if 'B' in variables: x_train['B'] = xB_sub.values
     if 'dB_dp' in variables: x_train['dB_dp'] = p_der_spline(x_train['B'],x_train['p'],x_train['p'],1)
     if 'd2B_dp2' in variables: x_train['d2B_dp2'] = p_der_spline(x_train['B'],x_train['p'],x_train['p'],2)
-    if 'dB_dp_FD' in variables: x_train['dB_dp_FD'] = p_derivative(x_train['B'],x_train['p'],1)
-    if 'd2B_dp2_FD' in variables: x_train['d2B_dp2_FD'] = p_derivative(x_train['dB_dp_FD'],x_train['p'],1)
+    if 'dB_dp_FD' in variables: x_train['dB_dp_FD'] = p_derivative(x_train['B'],x_train['p'])
+    if 'd2B_dp2_FD' in variables: x_train['d2B_dp2_FD'] = p_derivative(x_train['dB_dp_FD'],x_train['p'])
     if 'B_above' in variables: x_train['B_above'] = p_integral(x_train['B'],x_train['p'],'above')
     if 'B_below' in variables: x_train['B_below'] = p_integral(x_train['B'],x_train['p'],'below')
     if 'ps' in variables: x_train['ps'] = x_sub[:,60].values
@@ -135,8 +136,8 @@ def subsampler(ind,x,xRH,xB,xLHFns,xt,yt,xRHt,xBt,xLHFnst,hyam,hybm,
     if 'LHF' in variables: x_train['LHF'] = x_sub[:,63].values
     if 'LHFns' in variables: x_train['LHFns'] = xLHFns_sub.values
     y_train = {}
-    if 'dq_dt' in variables: y_train['dq_dt'] = y_sub[:,:30].values
-    if 'dT_dt' in variables: y_train['dT_dt'] = y_sub[:,30:60].values
+    y_train['dq_dt'] = y_sub[:,:30].values
+    y_train['dT_dt'] = y_sub[:,30:60].values
     # Test structure
     x_test = {}; y_test = {}
     for iclim,clim in enumerate(climates):
@@ -145,30 +146,30 @@ def subsampler(ind,x,xRH,xB,xLHFns,xt,yt,xRHt,xBt,xLHFnst,hyam,hybm,
         if 'p' in variables: x_test[clim]['p'] = P0*hyam+np.outer(xt_sub[clim][:,60].values,hybm)
         if 'q' in variables: x_test[clim]['q'] = xt_sub[clim][:,:30].values
         if 'dq_dp' in variables: x_test[clim]['dq_dp'] = p_der_spline(x_test[clim]['q'],x_test[clim]['p'],x_test[clim]['p'],1)
-        if 'dq_dp_FD' in variables: x_test[clim]['dq_dp_FD'] = p_derivative(x_test[clim]['q'],x_test[clim]['p'],1)
+        if 'dq_dp_FD' in variables: x_test[clim]['dq_dp_FD'] = p_derivative(x_test[clim]['q'],x_test[clim]['p'])
         if 'd2q_dp2' in variables: x_test[clim]['d2q_dp2'] = p_der_spline(x_test[clim]['q'],x_test[clim]['p'],x_test[clim]['p'],2)
-        if 'd2q_dp2_FD' in variables: x_test[clim]['d2q_dp2_FD'] = p_derivative(x_test[clim]['dq_dp'],x_test[clim]['p'],1)
+        if 'd2q_dp2_FD' in variables: x_test[clim]['d2q_dp2_FD'] = p_derivative(x_test[clim]['dq_dp_FD'],x_test[clim]['p'])
         if 'Q_above' in variables: x_test[clim]['Q_above'] = p_integral(x_test[clim]['q'],x_test[clim]['p'],'above')
         if 'Q_below' in variables: x_test[clim]['Q_below'] = p_integral(x_test[clim]['q'],x_test[clim]['p'],'below')
         if 'T' in variables: x_test[clim]['T'] = xt_sub[clim][:,30:60].values
         if 'dT_dp' in variables: x_test[clim]['dT_dp'] = p_der_spline(x_test[clim]['T'],x_test[clim]['p'],x_test[clim]['p'],1)
-        if 'dT_dp_FD' in variables: x_test[clim]['dT_dp_FD'] = p_derivative(x_test[clim]['T'],x_test[clim]['p'],1)
+        if 'dT_dp_FD' in variables: x_test[clim]['dT_dp_FD'] = p_derivative(x_test[clim]['T'],x_test[clim]['p'])
         if 'd2T_dp2' in variables: x_test[clim]['d2T_dp2'] = p_der_spline(x_test[clim]['T'],x_test[clim]['p'],x_test[clim]['p'],2)
-        if 'd2T_dp2_FD' in variables: x_test[clim]['d2T_dp2_FD'] = p_derivative(x_test[clim]['dT_dp'],x_test[clim]['p'],1)
+        if 'd2T_dp2_FD' in variables: x_test[clim]['d2T_dp2_FD'] = p_derivative(x_test[clim]['dT_dp_FD'],x_test[clim]['p'])
         if 'T_above' in variables: x_test[clim]['T_above'] = p_integral(x_test[clim]['T'],x_test[clim]['p'],'above')
         if 'T_below' in variables: x_test[clim]['T_below'] = p_integral(x_test[clim]['T'],x_test[clim]['p'],'below')
         if 'RH' in variables: x_test[clim]['RH'] = xRHt_sub[clim].values
         if 'dRH_dp' in variables: x_test[clim]['dRH_dp'] = p_der_spline(x_test[clim]['RH'],x_test[clim]['p'],x_test[clim]['p'],1)
-        if 'dRH_dp_FD' in variables: x_test[clim]['dRH_dp_FD'] = p_derivative(x_test[clim]['RH'],x_test[clim]['p'],1)
+        if 'dRH_dp_FD' in variables: x_test[clim]['dRH_dp_FD'] = p_derivative(x_test[clim]['RH'],x_test[clim]['p'])
         if 'd2RH_dp2' in variables: x_test[clim]['d2RH_dp2'] = p_der_spline(x_test[clim]['RH'],x_test[clim]['p'],x_test[clim]['p'],2)
-        if 'd2RH_dp2_FD' in variables: x_test[clim]['d2RH_dp2_FD'] = p_derivative(x_test[clim]['dRH_dp'],x_test[clim]['p'],1)
+        if 'd2RH_dp2_FD' in variables: x_test[clim]['d2RH_dp2_FD'] = p_derivative(x_test[clim]['dRH_dp_FD'],x_test[clim]['p'])
         if 'RH_above' in variables: x_test[clim]['RH_above'] = p_integral(x_test[clim]['RH'],x_test[clim]['p'],'above')
         if 'RH_below' in variables: x_test[clim]['RH_below'] = p_integral(x_test[clim]['RH'],x_test[clim]['p'],'below')
         if 'B' in variables: x_test[clim]['B'] = xBt_sub[clim].values
         if 'dB_dp' in variables: x_test[clim]['dB_dp'] = p_der_spline(x_test[clim]['B'],x_test[clim]['p'],x_test[clim]['p'],1)
-        if 'dB_dp_FD' in variables: x_test[clim]['dB_dp_FD'] = p_derivative(x_test[clim]['B'],x_test[clim]['p'],1)
+        if 'dB_dp_FD' in variables: x_test[clim]['dB_dp_FD'] = p_derivative(x_test[clim]['B'],x_test[clim]['p'])
         if 'd2B_dp2' in variables: x_test[clim]['d2B_dp2'] = p_der_spline(x_test[clim]['B'],x_test[clim]['p'],x_test[clim]['p'],2)
-        if 'd2B_dp2_FD' in variables: x_test[clim]['d2B_dp2_FD'] = p_derivative(x_test[clim]['dB_dp'],x_test[clim]['p'],1)
+        if 'd2B_dp2_FD' in variables: x_test[clim]['d2B_dp2_FD'] = p_derivative(x_test[clim]['dB_dp_FD'],x_test[clim]['p'])
         if 'B_above' in variables: x_test[clim]['B_above'] = p_integral(x_test[clim]['B'],x_test[clim]['p'],'above')
         if 'B_below' in variables: x_test[clim]['B_below'] = p_integral(x_test[clim]['B'],x_test[clim]['p'],'below')
         if 'ps' in variables: x_test[clim]['ps'] = xt_sub[clim][:,60].values
@@ -176,12 +177,12 @@ def subsampler(ind,x,xRH,xB,xLHFns,xt,yt,xRHt,xBt,xLHFnst,hyam,hybm,
         if 'SHF' in variables: x_test[clim]['SHF'] = xt_sub[clim][:,62].values
         if 'LHF' in variables: x_test[clim]['LHF'] = xt_sub[clim][:,63].values
         if 'LHFns' in variables: x_test[clim]['LHFns'] = xLHFnst_sub[clim].values
-        if 'dq_dt' in variables: y_test[clim]['dq_dt'] = yt_sub[clim][:,:30].values
-        if 'dT_dt' in variables: y_test[clim]['dT_dt'] = yt_sub[clim][:,30:60].values
+        y_test[clim]['dq_dt'] = yt_sub[clim][:,:30].values
+        y_test[clim]['dT_dt'] = yt_sub[clim][:,30:60].values
         
     return x_train,x_test,y_train,y_test
 
-def range_normalizer(x_train,x_test,scalar_keys,vector_keys,Norm=None):
+def range_normalizer(x_train,x_test,scalar_keys,vector_keys,climates=['m4K','ref','p4K'],Norm=None):
     """
     (Optionally) calculates a normalization structure (Norm)
     and normalizes input variables using their range
@@ -190,6 +191,7 @@ def range_normalizer(x_train,x_test,scalar_keys,vector_keys,Norm=None):
     scalar_keys = Keys corresponding to scalar variables
     vector_keys = Keys corresponding to vector variables
     """
+    combin_keys = np.concatenate((scalar_keys,vector_keys))
     if Norm==None:
         Norm = {}
         Norm['mean'] = {}
@@ -202,7 +204,6 @@ def range_normalizer(x_train,x_test,scalar_keys,vector_keys,Norm=None):
             Norm['max'][keys] = np.max(x_train[keys].flatten())
             Norm['std'][keys] = np.std(x_train[keys].flatten())
     
-    combin_keys = np.concatenate((scalar_keys,vector_keys))
     x_train_range = {}
     x_test_range = {}
     for key in scalar_keys:
@@ -221,7 +222,7 @@ def range_normalizer(x_train,x_test,scalar_keys,vector_keys,Norm=None):
             
     return x_train_range,x_test_range,Norm
 
-def dic_to_array(key_array,x_train_range,x_test_range,scale_dict):
+def dic_to_array(key_array,x_train_range,x_test_range,y_train,y_test,scale_dict,climates=['m4K','ref','p4K'],):
     """
     Converts dictionary (x_train_range,x_test_range) containing 
     normalized variables into array that can be used for regression
@@ -250,7 +251,7 @@ def dic_to_array(key_array,x_train_range,x_test_range,scale_dict):
         
     return X_train,X_test,dQdt_train,dQdt_test,dTdt_train,dTdt_test
 
-def SFS_poly(features,X_train,X_test,Y_train,Y_test,min_features,max_features):
+def SFS_poly(features,X_train,X_test,Y_train,Y_test,min_features,max_features,cv,climates=['m4K','ref','p4K'],):
     """
     Sequential feature selection based on polynomial fits
     features = Inputs to select
@@ -267,7 +268,7 @@ def SFS_poly(features,X_train,X_test,Y_train,Y_test,min_features,max_features):
         sfs = SequentialFeatureSelector(lin_reg,
                                         n_features_to_select=no_features,
                                         direction='forward',
-                                        cv=cv[ideg], n_jobs=-1)
+                                        cv=cv, n_jobs=-1)
         sfs.fit(X_train, Y_train)
         selected_features = np.array(features)[sfs.get_support()].tolist()
         X_transformed = sfs.transform(X_train)
