@@ -594,7 +594,7 @@ def load_O3_AQUA(ds):
     """
     dT = compute_bp(ds,'TBP') # Calculate TBP to get the right shape
     
-    path_O3 = '/export/nfs0home/tbeucler/CBRAIN-CAM/notebooks/tbeucler_devlog/PKL_DATA/2021_01_24_O3.pkl' # Hardcode O3 path for now
+    path_O3 = '/DFS-L/DATA/pritchard/tbeucler/SPCAM/SPCAM_PHYS/PKL_DATA/2021_01_24_O3.pkl' # Hardcode O3 path for now
     dO3 = pickle.load(open(path_O3,'rb'))
     O3 = dO3['O3_aqua']
     O3_interpolated = O3.interp({"lev": dT.lev}) # Interpolate to the right vertical levels
@@ -623,6 +623,8 @@ def create_stacked_da(ds, vars, PERC_array = None, quantile_array = None, real_g
             da = compute_eps(ds, var)
         elif 'FLUX' in var:
             da = compute_flux(ds,var)
+        elif 'NN' in var:
+            da = ds[var][1:] # Directly read the variable if name contains "NN" 
         elif 'BP' in var:
             if real_geography:
                 da = ds[var][1:]
@@ -811,9 +813,11 @@ def preprocess(in_dir, in_fns, out_dir, out_fn, vars, lev_range=(0, 30), path_PE
 
     logging.info('Stack and reshape dataarray')
     da = reshape_da(da).reset_index('sample')
-
+    
+    logging.info(f'Data array to save is of shape {da.shape}')
     logging.info(f'Save dataarray as {out_fn}')
-    da.load().to_netcdf(out_fn)
+    #da.load().to_netcdf(out_fn)
+    da.to_netcdf(out_fn)
 
     logging.info('Done!')
 
