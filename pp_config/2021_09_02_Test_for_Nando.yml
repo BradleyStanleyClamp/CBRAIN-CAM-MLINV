@@ -1,5 +1,5 @@
 # Describe this dataset
-vars : [QBP, TBP, PS, SOLIN, SHFLX, LHFLX, PHQ, TPHYSTND, FSNT, FSNS, FLNT, FLNS, PRECT]
+vars : [QBP, TBP, VBP, PS, SOLIN, SHFLX, LHFLX, PHQ, TPHYSTND, FSNT, FSNS, FLNT, FLNS, PRECT]
 
 in_dir : /DFS-L/DATA/pritchard/tbeucler/SPCAM/fluxbypass_aqua/
 in_fns : AndKua_aqua_SPCAM3.0_sp_fbp_f4.cam2.h1.0000-0[6-9]-*-*.nc

@@ -6,13 +6,14 @@ Main Repository Author: Stephan Rasp - <raspstephan@gmail.com> - https://raspste
 
 Thank you for checking out this fork of the CBRAIN repository (https://github.com/raspstephan/CBRAIN-CAM), dedicated to building *physically-constrained and physically-informed* climate model parameterizations. This is a working fork in a working repository, which means that recent commits may not always be functional or documented. 
 
+If you are looking for the version of the code that corresponds to the climate-invariant paper, check out this release: 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5775489.svg)](https://doi.org/10.5281/zenodo.5775489)
 
-If you are looking for the version of the code that corresponds to the PNAS paper. Check out this release: https://github.com/raspstephan/CBRAIN-CAM/releases/tag/PNAS_final
+If you are looking for the version of the code that corresponds to the PNAS paper, check out this release: https://github.com/raspstephan/CBRAIN-CAM/releases/tag/PNAS_final
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1402384.svg)](https://doi.org/10.5281/zenodo.1402384)
 
-The modified climate model code is available at https://gitlab.com/mspritch/spcam3.0-neural-net (branch: `nn_fbp_engy_ess`)
+The modified SPCAM3 climate model code is available at https://gitlab.com/mspritch/spcam3.0-neural-net (branch: `nn_fbp_engy_ess`)
 
 
 ### Papers using this fork

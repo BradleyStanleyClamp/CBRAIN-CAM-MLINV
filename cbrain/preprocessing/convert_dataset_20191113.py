@@ -647,7 +647,8 @@ def create_stacked_da(ds, vars, PERC_array = None, quantile_array = None, real_g
         elif real_geography and var == 'PRECT':
             da = (ds['NN2L_PRECC'] + ds['NN2L_PRECL'])[1:]
         elif var == 'PRECT':
-            da = (ds['PRECC'] + ds['PRECL'])[1:]
+            if ('PRECT' in ds.keys()): da = ds['PRECT'][1:]
+            else: da = (ds['PRECC'] + ds['PRECL'])[1:]
         elif var == 'RH':
             da = compute_RH(ds)
         elif var == 'QSATdeficit':

@@ -7,7 +7,5 @@ in_fns : sp8fbp_4k.cam2.h2.0001-0[1-4]-*-*.nc
 out_dir: /DFS-L/DATA/pritchard/tbeucler/SPCAM/SPCAM_PHYS/
 out_fn: 2021_03_18_O3_TRAIN_P4K.nc
 
-shuffle: True
-
 val_in_fns: sp8fbp_4k.cam2.h2.0001-0[5-8]-*-*.nc
 val_out_fn: 2021_03_18_O3_VALID_P4K.nc
