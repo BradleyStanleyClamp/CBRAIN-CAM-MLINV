@@ -1,8 +1,11 @@
 # CBRAIN-CAM - a neural network climate model parameterization
 # Physically-constrained & Physically-informed fork 
 
+Second Fork Author: Bradley Stanley-Clamp - <bradleysc@robots.ox.ac.uk>
 Fork Author: Tom Beucler - <tom.beucler@gmail.com> - https://wp.unil.ch/dawn
 Main Repository Author: Stephan Rasp - <raspstephan@gmail.com> - https://raspstephan.github.io
+
+This is a fork of the work by Beucler .et al Climate-invariant Machine learning, looking at how we can learn invariant transformations in a data driven approach. 
 
 Thank you for checking out this fork of the CBRAIN repository (https://github.com/raspstephan/CBRAIN-CAM), dedicated to building *physically-constrained and physically-informed* climate model parameterizations. This is a working fork in a working repository, which means that recent commits may not always be functional or documented. 
 
